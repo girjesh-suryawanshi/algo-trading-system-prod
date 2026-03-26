@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: algo
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: ./algo-backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/algo
+    depends_on:
+      - postgres
+
+  python:
+    build: ./algo-python
+    ports:
+      - "8000:8000"
+    environment:
+      SPRING_URL: http://backend:8080/api/trade
+      DHAN_ACCESS_TOKEN: ${DHAN_ACCESS_TOKEN}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+    depends_on:
+      - backend
+
+  ui:
+    build: ./algo-ui
+    ports:
+      - "4200:80"
+    depends_on:
+      - backend
