@@ -1,0 +1,10 @@
+D:\nodeworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\controller\TradeController.java
+D:\nodeworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\AlgoApplication.java
+D:\nodeworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\repository\TradeRepository.java
+D:\nodeworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\model\Trade.java
+D:\nodeworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\service\RiskService.java
+D:\nodeworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\model\SystemLog.java
+D:\nodeworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\repository\SystemLogRepository.java
+D:\nodeworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\service\DhanExecutionService.java
+D:\nodeworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\service\LogService.java
+D:\nodeworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\service\TradeMonitoringService.java
