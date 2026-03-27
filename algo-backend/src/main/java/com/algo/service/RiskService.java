@@ -44,6 +44,17 @@ public class RiskService {
             return false;
         }
 
+        // 4. Validate One Trade Per Strike / No Duplicates
+        boolean hasDuplicateOrActive = todayTrades.stream()
+                .anyMatch(t -> t.getStrike() != null &&
+                        t.getStrike().equals(trade.getStrike()) &&
+                        t.getOptionType() != null &&
+                        t.getOptionType().equals(trade.getOptionType()));
+
+        if (hasDuplicateOrActive) {
+            return false;
+        }
+
         return true;
     }
 

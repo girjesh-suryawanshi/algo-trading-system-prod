@@ -1,10 +1,21 @@
 import asyncio
 from fastapi import FastAPI, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from strategy import run_strategy, state
 from backtest_engine import run_backtest
+from dhan_historical import fetch_historical_chain
+from pydantic import BaseModel
 import pandas as pd
 
 app = FastAPI(title="Algo Strategy Engine")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 is_auto_running = False
 
@@ -47,12 +58,13 @@ def status():
         "strategy_state": state
     }
 
+class BacktestRequest(BaseModel):
+    fromDate: str
+    toDate: str
+
 @app.post("/backtest")
-def backtest():
-    # In real scenario, would load from DB/CSV
-    # Mock data for demonstration
-    mock_data = pd.DataFrame([
-        {"strike": 23500, "low": 4.5, "high": 12.0, "close": 11.0},
-        {"strike": 23500, "low": 4.0, "high": 8.5, "close": 8.0},
-    ])
-    return run_backtest(mock_data)
+async def backtest(req: BacktestRequest):
+    df = await fetch_historical_chain(req.fromDate, req.toDate)
+    if df.empty:
+        return {"error": "No historical data fetched from Dhan for this date range. Check API limits or date validity."}
+    return run_backtest(df)

@@ -26,6 +26,7 @@ services:
     environment:
       SPRING_URL: http://backend:8080/api/trade
       DHAN_ACCESS_TOKEN: ${DHAN_ACCESS_TOKEN}
+      DHAN_CLIENT_ID: ${DHAN_CLIENT_ID}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
     depends_on:

@@ -6,9 +6,11 @@ load_dotenv()
 
 BASE_URL = "https://api.dhan.co"
 TOKEN = os.getenv("DHAN_ACCESS_TOKEN", "YOUR_TOKEN")
+CLIENT_ID = os.getenv("DHAN_CLIENT_ID", "")
 
 HEADERS = {
     "access-token": TOKEN,
+    "client-id": CLIENT_ID,
     "Content-Type": "application/json"
 }
 
