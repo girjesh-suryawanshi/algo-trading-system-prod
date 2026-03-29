@@ -1,15 +1,28 @@
 package com.algo.service;
 
 import com.algo.model.Trade;
+import com.algo.model.User;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
 public class DhanExecutionService {
 
+    private final EncryptionService encryptionService;
+
     public boolean placeOrder(Trade trade) {
-        // In real scenario, make HTTP call to Dhan API
-        // For demonstration, we simulate success
-        System.out.println("Placing order on Dhan: " + trade.getSymbol() + " " + trade.getStrike());
+        User user = trade.getUser();
+        String accessToken = encryptionService.decrypt(user.getDhanAccessToken());
+        String clientId = encryptionService.decrypt(user.getDhanClientId());
+
+        if (accessToken == null || clientId == null) {
+            System.err.println("User " + user.getEmail() + " has not configured Dhan API keys.");
+            return false;
+        }
+
+        // Real Dhan API call would go here using decrypted accessToken/clientId
+        System.out.println("Placing order for User: " + user.getEmail() + " | Strike: " + trade.getStrike() + " Type: " + trade.getOptionType());
         return true;
     }
     

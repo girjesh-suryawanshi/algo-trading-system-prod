@@ -1,43 +1,27 @@
 import requests, os
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
-
-load_dotenv()
 
 BASE_URL = "https://api.dhan.co"
-TOKEN = os.getenv("DHAN_ACCESS_TOKEN", "YOUR_TOKEN")
-CLIENT_ID = os.getenv("DHAN_CLIENT_ID", "")
 
-HEADERS = {
-    "access-token": TOKEN,
-    "client-id": CLIENT_ID,
-    "Content-Type": "application/json"
-}
+def get_headers(access_token, client_id):
+    return {
+        "access-token": access_token,
+        "client-id": client_id,
+        "Content-Type": "application/json"
+    }
 
-def get_option_chain(symbol="NIFTY"):
-    """
-    Fetches the option chain for the given symbol.
-    """
+def get_option_chain(access_token, client_id, symbol="NIFTY"):
     url = f"{BASE_URL}/option-chain?symbol={symbol}"
     try:
-        res = requests.get(url, headers=HEADERS, timeout=5)
+        res = requests.get(url, headers=get_headers(access_token, client_id), timeout=5)
         if res.status_code == 200:
             return res.json()
         raise Exception(f"API Error: {res.status_code}")
     except Exception as e:
         print(f"Error fetching option chain: {e}")
-        # fallback dummy data for testing
-        return {"data": [
-            {"strikePrice": 23500, "optionType": "CE", "ltp": 11.2, "securityId": "1"},
-            {"strikePrice": 23500, "optionType": "PE", "ltp": 9.5, "securityId": "2"},
-            {"strikePrice": 23600, "optionType": "CE", "ltp": 14.5, "securityId": "3"},
-            {"strikePrice": 23400, "optionType": "PE", "ltp": 12.0, "securityId": "4"}
-        ]}
+        return {"data": []}
 
-def get_historical_data(security_id, days=7):
-    """
-    Fetches historical data for the last 'days' to compute the LOW.
-    """
+def get_historical_data(access_token, client_id, security_id, days=7):
     to_date = datetime.now().strftime("%Y-%m-%d")
     from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     
@@ -51,22 +35,18 @@ def get_historical_data(security_id, days=7):
         "toDate": to_date
     }
     try:
-        res = requests.post(url, json=payload, headers=HEADERS, timeout=5)
+        res = requests.post(url, json=payload, headers=get_headers(access_token, client_id), timeout=5)
         if res.status_code == 200:
             return res.json()
         raise Exception(f"API Error: {res.status_code}")
     except Exception as e:
         print(f"Error fetching historical: {e}")
-        # fallback dummy: last 7 days low simulation
-        return {"data": [{"low": 4.5}, {"low": 5.2}, {"low": 3.9}, {"low": 6.1}]}
+        return {"data": []}
 
-def get_ltp(security_id):
-    """
-    Fetches real-time LTP for a security ID.
-    """
+def get_ltp(access_token, client_id, security_id):
     url = f"{BASE_URL}/market-quote/{security_id}"
     try:
-        res = requests.get(url, headers=HEADERS, timeout=3)
+        res = requests.get(url, headers=get_headers(access_token, client_id), timeout=3)
         return res.json().get('data', {}).get('ltp', 0)
     except Exception:
-        return 12.5 # Mock LTP
+        return 0.0

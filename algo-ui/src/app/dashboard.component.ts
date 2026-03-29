@@ -1,6 +1,8 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { interval, Subscription } from 'rxjs';
+import { AuthService } from './auth.service';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-dashboard',
@@ -9,7 +11,7 @@ import { interval, Subscription } from 'rxjs';
   <div class="dashboard dark-theme">
     <header class="glass-header">
       <div class="brand">
-        <h1>ALGO<span class="neon-text">TERMINAL</span></h1>
+        <h1>Lumina<span class="neon-text">Quant</span></h1>
       </div>
       
       <div class="tabs">
@@ -18,11 +20,12 @@ import { interval, Subscription } from 'rxjs';
       </div>
 
       <div class="status-panel">
+        <div class="user-info">
+          <button routerLink="/profile" class="btn-profile">Settings</button>
+          <button (click)="onLogout()" class="btn-logout">Logout</button>
+        </div>
         <button *ngIf="activeTab === 'LIVE'" [class.active-neon]="autoRunning" [class.inactive-neon]="!autoRunning" (click)="toggleEngine()">
           ENGINE: {{ autoRunning ? 'LIVE' : 'IDLE' }}
-        </button>
-        <button *ngIf="activeTab === 'LIVE'" [class.danger-neon]="killSwitch" [class.safe-neon]="!killSwitch" (click)="toggleKillSwitch()">
-          KILL SWITCH: {{ killSwitch ? 'ACTIVE' : 'OFF' }}
         </button>
       </div>
     </header>
@@ -281,7 +284,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private sub?: Subscription;
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private auth: AuthService, private router: Router) {}
+
+  onLogout() {
+    this.auth.logout();
+    this.router.navigate(['/login']);
+  }
 
   ngOnInit() {
     this.refreshData();
@@ -303,7 +311,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       error: () => {}
     });
 
-    this.http.get<any>('http://localhost:8000/status').subscribe({
+    this.http.get<any>('http://localhost:8080/api/engine/status').subscribe({
       next: (res) => {
         this.autoRunning = res.auto_running;
         this.strategyState = res.strategy_state || {};
@@ -331,9 +339,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   toggleEngine() {
-    const endpoint = this.autoRunning ? '/stop' : '/start';
-    this.autoRunning = !this.autoRunning;
-    this.http.get(`http://localhost:8000${endpoint}`).subscribe();
+    const nextState = !this.autoRunning;
+    this.http.post(`http://localhost:8080/api/engine/toggle?active=${nextState}`, {}).subscribe({
+      next: () => {
+        this.autoRunning = nextState;
+      },
+      error: (err) => {
+        alert("Failed to toggle engine. Check your Profile API keys.");
+      }
+    });
   }
 
   hasTrackedStrikes(): boolean {
@@ -384,7 +398,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.backtestError = null;
     this.backtestResults = null;
     
-    this.http.post<any>('http://localhost:8000/backtest', this.backtestReq).subscribe({
+    this.http.post<any>('http://localhost:8080/api/backtest/run', this.backtestReq).subscribe({
       next: (res) => {
         this.isBacktesting = false;
         if (res.error) {
@@ -395,7 +409,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.isBacktesting = false;
-        this.backtestError = "Failed to reach python simulator. Verify API keys and connection.";
+        this.backtestError = "Failed to reach backend proxy. Ensure your Profile is configured.";
       }
     });
   }

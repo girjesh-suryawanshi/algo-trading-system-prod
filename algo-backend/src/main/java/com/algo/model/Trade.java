@@ -30,6 +30,10 @@ public class Trade {
     private String strategyName;
     private Integer qty;
     
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
+
     private LocalDateTime createdAt;
     private LocalDateTime closedAt;
 }
