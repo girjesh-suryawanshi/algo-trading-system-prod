@@ -157,3 +157,44 @@
   color: white; box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
 }
 .error-msg { font-weight: 600; padding: 15px; border-radius: 8px; background: rgba(255, 61, 0, 0.1); border: 1px solid rgba(255, 61, 0, 0.3); }
+
+/* Risk Status Styles */
+.risk-card {
+  margin-top: 20px;
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
+}
+.risk-metrics {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+.risk-info { display: flex; flex-direction: column; }
+.risk-info small { font-size: 0.65rem; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px; }
+.risk-info span { font-size: 1.1rem; font-weight: 700; }
+
+.progress-container {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 10px 0;
+}
+.progress-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease-in-out;
+}
+.progress-bar.safe { background: #3b82f6; }
+.progress-bar.warning { background: #facc15; }
+.progress-bar.danger { background: #ef4444; }
+
+.tsl-pill {
+  font-size: 0.65rem;
+  background: rgba(56, 189, 248, 0.1);
+  color: #38bdf8;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  margin-top: 4px;
+  display: inline-block;
+}

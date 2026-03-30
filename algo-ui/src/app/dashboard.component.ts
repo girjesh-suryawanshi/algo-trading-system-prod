@@ -48,7 +48,7 @@ import { Router } from '@angular/router';
         <div class="glass-card">
           <h2><i class="icon">⚡</i> Active Tracking</h2>
           <div class="tracker-list">
-            <div *ngIf="!hasTrackedStrikes()" class="empty-state">No strikes currently matching criteria (Premium <= 12).</div>
+            <div *ngIf="!hasTrackedStrikes()" class="empty-state">No strikes currently matching criteria.</div>
             <div *ngFor="let kv of getTrackedStrikes()" class="track-item" [class.executed]="kv.value.status === 'EXECUTED'">
               <div class="track-header">
                 <span class="opt-badge" [class.ce]="kv.key === 'CE'" [class.pe]="kv.key === 'PE'">{{ kv.key }}</span>
@@ -65,6 +65,45 @@ import { Router } from '@angular/router';
                   <span class="neon-text">₹{{ kv.value.entry | number:'1.2-2' }}</span>
                 </div>
               </div>
+              <div *ngIf="kv.value.status === 'EXECUTED' && kv.value.stopLoss" class="tsl-pill">
+                TSL ACTIVE: ₹{{ kv.value.stopLoss | number:'1.2-2' }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DAILY RISK STATUS -->
+        <div class="glass-card risk-card">
+          <h2><i class="icon">🛡️</i> Daily Risk status</h2>
+          <div class="risk-metrics">
+            <div class="risk-info">
+              <small>Daily PnL</small>
+              <span [class.neon-green]="totalPnL > 0" [class.neon-red]="totalPnL < 0">
+                ₹{{ totalPnL | number:'1.0-0' }}
+              </span>
+            </div>
+            <div class="risk-info text-right">
+              <small>Max Loss Limit</small>
+              <span>₹{{ maxDailyLoss | number:'1.0-0' }}</span>
+            </div>
+          </div>
+          
+          <div class="progress-container">
+            <div class="progress-bar" 
+                 [style.width.%]="getRiskProgress()" 
+                 [ngClass]="getRiskColor()"></div>
+          </div>
+          
+          <div class="risk-metrics mt-10">
+            <div class="risk-info">
+              <small>Trades Today</small>
+              <span>{{ trades.length }} / {{ maxTradesPerDay }}</span>
+            </div>
+            <div class="risk-info text-right">
+              <small>Status</small>
+              <span [class.neon-green]="totalPnL > -maxDailyLoss" [class.neon-red]="totalPnL <= -maxDailyLoss">
+                {{ totalPnL <= -maxDailyLoss ? 'LIMIT REACHED' : 'SAFE' }}
+              </span>
             </div>
           </div>
         </div>
@@ -266,6 +305,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   winRate = 0;
   totalPnL = 0;
   activeTradesCount = 0;
+  maxDailyLoss = 5000;
+  maxTradesPerDay = 10;
   
   // Market Selection
   instruments: any = {};
@@ -312,8 +353,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.fetchInstruments();
+    this.fetchProfile();
     this.refreshData();
     this.sub = interval(3000).subscribe(() => this.refreshData());
+  }
+
+  fetchProfile() {
+    this.http.get<any>(`${this.baseUrl}/user/profile`).subscribe({
+      next: (res) => {
+        this.maxDailyLoss = res.maxDailyLoss || 5000;
+        this.maxTradesPerDay = res.maxTradesPerDay || 10;
+      }
+    });
   }
 
   fetchInstruments() {
@@ -379,6 +430,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
       },
       error: () => {}
     });
+  }
+
+  getRiskProgress(): number {
+    if (this.totalPnL >= 0) return 0;
+    const loss = Math.abs(this.totalPnL);
+    return Math.min(100, (loss / this.maxDailyLoss) * 100);
+  }
+
+  getRiskColor() {
+    const progress = this.getRiskProgress();
+    if (progress > 80) return 'danger';
+    if (progress > 50) return 'warning';
+    return 'safe';
   }
 
   calculateMetrics() {

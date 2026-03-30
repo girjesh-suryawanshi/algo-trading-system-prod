@@ -22,4 +22,8 @@ public class UserProfileDTO {
     private String preferredExpiry;
     private Integer instrumentId;
     private String exchangeSegment;
+    
+    private Double maxDailyLoss;
+    private Integer maxTradesPerDay;
+    private Double trailingStopLossStep;
 }

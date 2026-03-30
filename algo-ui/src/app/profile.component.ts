@@ -54,11 +54,33 @@ import { Router } from '@angular/router';
             </div>
 
             <div class="section">
-              <h3>Strategy Settings</h3>
-              <div class="form-group">
-                <label>Scan Target Price Limit (e.g. 12.0 or 20.0)</label>
-                <input type="number" name="targetPriceLimit" [(ngModel)]="profile.targetPriceLimit" placeholder="12.0">
-                <p class="form-help">Option premiums at or below this price will be scanned for setup entry.</p>
+              <h3>Risk & TSL Management</h3>
+              <p class="form-help mb-3">These safety limits are enforced at the strategy engine and backend levels.</p>
+              
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Max Daily Loss (₹)</label>
+                  <input type="number" name="maxDailyLoss" [(ngModel)]="profile.maxDailyLoss" placeholder="5000">
+                  <p class="form-help">Stop trading if today's loss exceeds this.</p>
+                </div>
+                <div class="form-group">
+                  <label>Max Trades Per Day</label>
+                  <input type="number" name="maxTradesPerDay" [(ngModel)]="profile.maxTradesPerDay" placeholder="10">
+                  <p class="form-help">Max entry signals to execute per day.</p>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Trailing SL Step (₹)</label>
+                  <input type="number" step="0.5" name="trailingStopLossStep" [(ngModel)]="profile.trailingStopLossStep" placeholder="1.0">
+                  <p class="form-help">Move SL up for every ₹X move in profit.</p>
+                </div>
+                <div class="form-group">
+                  <label>Scan Target Price Limit (Premium)</label>
+                  <input type="number" name="targetPriceLimit" [(ngModel)]="profile.targetPriceLimit" placeholder="12.0">
+                  <p class="form-help">Max premium price to consider for entry.</p>
+                </div>
               </div>
             </div>
 

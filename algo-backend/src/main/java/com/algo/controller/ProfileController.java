@@ -44,6 +44,9 @@ public class ProfileController {
                 .preferredExpiry(user.getPreferredExpiry())
                 .instrumentId(user.getInstrumentId())
                 .exchangeSegment(user.getExchangeSegment())
+                .maxDailyLoss(user.getMaxDailyLoss())
+                .maxTradesPerDay(user.getMaxTradesPerDay())
+                .trailingStopLossStep(user.getTrailingStopLossStep())
                 .build());
     }
 
@@ -58,6 +61,18 @@ public class ProfileController {
         
         if (dto.getTargetPriceLimit() != null) {
             user.setTargetPriceLimit(dto.getTargetPriceLimit());
+        }
+        
+        if (dto.getMaxDailyLoss() != null) {
+            user.setMaxDailyLoss(dto.getMaxDailyLoss());
+        }
+        
+        if (dto.getMaxTradesPerDay() != null) {
+            user.setMaxTradesPerDay(dto.getMaxTradesPerDay());
+        }
+        
+        if (dto.getTrailingStopLossStep() != null) {
+            user.setTrailingStopLossStep(dto.getTrailingStopLossStep());
         }
         
         try {
@@ -122,16 +137,18 @@ public class ProfileController {
         boolean active = (boolean) params.getOrDefault("active", false);
         String endpoint = active ? "/engine/start" : "/engine/stop";
         
-        Map<String, Object> payload = Map.of(
-            "userId", user.getId(),
-            "accessToken", encryptionService.decrypt(user.getDhanAccessToken()),
-            "clientId", encryptionService.decrypt(user.getDhanClientId()),
-            "targetPriceLimit", user.getTargetPriceLimit(),
-            "symbol", params.getOrDefault("symbol", "NIFTY"),
-            "securityId", String.valueOf(params.getOrDefault("securityId", "13")),
-            "segment", params.getOrDefault("segment", "IDX_I"),
-            "expiry", params.getOrDefault("expiry", "")
-        );
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("userId", user.getId());
+        payload.put("accessToken", encryptionService.decrypt(user.getDhanAccessToken()));
+        payload.put("clientId", encryptionService.decrypt(user.getDhanClientId()));
+        payload.put("targetPriceLimit", user.getTargetPriceLimit());
+        payload.put("maxDailyLoss", user.getMaxDailyLoss());
+        payload.put("maxTradesPerDay", user.getMaxTradesPerDay());
+        payload.put("trailingStopLossStep", user.getTrailingStopLossStep());
+        payload.put("symbol", params.getOrDefault("symbol", "NIFTY"));
+        payload.put("securityId", String.valueOf(params.getOrDefault("securityId", "13")));
+        payload.put("segment", params.getOrDefault("segment", "IDX_I"));
+        payload.put("expiry", params.getOrDefault("expiry", ""));
 
         try {
             Object response = restTemplate.postForObject(pythonUrl + endpoint, payload, Object.class);

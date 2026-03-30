@@ -42,5 +42,14 @@ public class User {
     @Builder.Default
     private AuthProvider provider = AuthProvider.LOCAL;
 
+    @Builder.Default
+    private Double maxDailyLoss = 5000.0;
+    
+    @Builder.Default
+    private Integer maxTradesPerDay = 10;
+    
+    @Builder.Default
+    private Double trailingStopLossStep = 1.0;
+
     private String role;
 }

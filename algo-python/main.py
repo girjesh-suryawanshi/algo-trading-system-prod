@@ -43,6 +43,9 @@ class EngineRequest(BaseModel):
     securityId: str = "13"
     segment: str = "IDX_I"
     expiry: str = ""
+    maxDailyLoss: float = 5000.0
+    maxTradesPerDay: int = 10
+    trailingStopLossStep: float = 1.0
 
 @app.get("/instruments")
 async def get_instruments():
@@ -78,7 +81,8 @@ async def start_engine(req: EngineRequest):
     manager = StrategyManager(
         req.userId, req.accessToken, req.clientId, 
         req.targetPriceLimit, req.symbol, req.securityId, 
-        req.segment, req.expiry
+        req.segment, req.expiry,
+        req.maxDailyLoss, req.maxTradesPerDay, req.trailingStopLossStep
     )
     user_managers[req.userId] = manager
     task = asyncio.create_task(run_user_loop(req.userId))
