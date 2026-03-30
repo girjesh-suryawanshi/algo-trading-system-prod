@@ -25,6 +25,27 @@
 .brand h1 { margin: 0; font-weight: 800; font-size: 1.5rem; letter-spacing: 1px; color: #fff; }
 .neon-text { color: #00e676; text-shadow: 0 0 10px rgba(0,230,118,0.5); }
 
+.market-selector {
+  display: flex;
+  gap: 10px;
+  margin-right: 20px;
+}
+.market-selector select {
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.3s;
+}
+.market-selector select:hover { border-color: #3b82f6; }
+.market-selector select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.status-panel { display: flex; align-items: center; }
+
 .status-panel button {
   padding: 10px 24px;
   margin-left: 15px;

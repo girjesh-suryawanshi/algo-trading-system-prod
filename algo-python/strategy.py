@@ -3,11 +3,15 @@ from dhan_api import get_option_chain, get_historical_data, get_ltp
 from alerts import alert_entry
 
 class StrategyManager:
-    def __init__(self, user_id, access_token, client_id, target_price_limit=12.0):
+    def __init__(self, user_id, access_token, client_id, target_price_limit=12.0, symbol="NIFTY", security_id="13", segment="IDX_I", expiry=""):
         self.user_id = user_id
         self.access_token = access_token
         self.client_id = client_id
         self.target_price_limit = target_price_limit
+        self.symbol = symbol
+        self.security_id = security_id
+        self.segment = segment
+        self.expiry = expiry
         self.state = {}
         self.SPRING_URL = os.getenv("SPRING_URL", "http://backend:8080/api/trade")
 
@@ -28,7 +32,7 @@ class StrategyManager:
             if symbol_key in self.state and self.state[symbol_key]['status'] == 'EXECUTED':
                 pass
             else:
-                history = get_historical_data(self.access_token, self.client_id, security_id, days=7)
+                history = get_historical_data(self.access_token, self.client_id, security_id, self.segment, days=7)
                 lows = [c['low'] for c in history.get('data', [])]
                 weekly_low = min(lows) if lows else current_ltp
                 
@@ -40,7 +44,7 @@ class StrategyManager:
                     "status": "WAITING",
                     "optionType": symbol_key
                 }
-                print(f"User {self.user_id} tracking {symbol_key} at Strike {strike}, Entry {weekly_low*2}")
+                print(f"User {self.user_id} tracking {self.symbol} {symbol_key} at Strike {strike}, Entry {weekly_low*2}")
         
         current_live_ltp = get_ltp(self.access_token, self.client_id, security_id)
         if self.state[symbol_key]["status"] == "WAITING" and current_live_ltp < self.state[symbol_key]["low"]:
@@ -52,14 +56,14 @@ class StrategyManager:
         if current_live_ltp >= entry_price and self.state[symbol_key]["status"] == "WAITING":
             self.send_signal(best_option, entry_price, self.state[symbol_key]["low"])
             self.state[symbol_key]["status"] = "EXECUTED"
-            alert_entry("NIFTY", strike, entry_price)
+            alert_entry(self.symbol, strike, entry_price)
 
     def run_strategy(self):
-        data = get_option_chain(self.access_token, self.client_id, symbol="NIFTY")
+        data = get_option_chain(self.access_token, self.client_id, self.security_id, self.segment, self.expiry)
         options = data.get('data', [])
         best_options = self.select_best_strikes(options)
         if not best_options:
-            return {"msg": "No eligible strikes for user " + str(self.user_id)}
+            return {"msg": f"No eligible strikes for user {self.user_id} on {self.symbol}"}
 
         for opt_type, best_option in best_options.items():
             self.process_option_type(opt_type, best_option)
@@ -70,7 +74,7 @@ class StrategyManager:
         sl = max(0.05, low - 1)
         risk = entry - sl
         payload = {
-            "symbol": "NIFTY",
+            "symbol": self.symbol,
             "strike": option['strikePrice'],
             "optionType": option['optionType'],
             "entryPrice": entry,
@@ -84,6 +88,6 @@ class StrategyManager:
         }
         try:
             requests.post(self.SPRING_URL, json=payload, timeout=3)
-            print(f"Signal sent for User {self.user_id}: {option['optionType']} {option['strikePrice']}")
+            print(f"Signal sent for User {self.user_id}: {self.symbol} {option['optionType']} {option['strikePrice']}")
         except Exception as e:
             print(f"Failed to send signal for {self.user_id}: {e}")

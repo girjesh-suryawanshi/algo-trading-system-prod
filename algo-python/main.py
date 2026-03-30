@@ -1,12 +1,13 @@
-import asyncio
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import asyncio
+from dhan_api import get_expiry_list, get_option_chain
 from strategy import StrategyManager
 from backtest_engine import run_backtest
 from dhan_historical import fetch_historical_chain
 from pydantic import BaseModel
 import pandas as pd
-from typing import Dict
+from typing import Dict, Any
 
 app = FastAPI(title="LuminaQuant Strategy Engine")
 
@@ -38,22 +39,56 @@ class EngineRequest(BaseModel):
     accessToken: str
     clientId: str
     targetPriceLimit: float = 12.0
+    symbol: str = "NIFTY"
+    securityId: str = "13"
+    segment: str = "IDX_I"
+    expiry: str = ""
+
+@app.get("/instruments")
+async def get_instruments():
+    return {
+        "data": {
+            "NIFTY": {"id": 13, "segment": "IDX_I"},
+            "BANKNIFTY": {"id": 25, "segment": "IDX_I"},
+            "FINNIFTY": {"id": 27, "segment": "IDX_I"},
+            "SENSEX": {"id": 1, "segment": "IDX_I"}
+        }
+    }
+
+@app.post("/fetch-expiries")
+async def fetch_expiries(req: Dict[str, Any]):
+    return {
+        "data": get_expiry_list(
+            req.get("accessToken"), 
+            req.get("clientId"), 
+            req.get("securityId"), 
+            req.get("segment", "IDX_I")
+        )
+    }
 
 @app.post("/engine/start")
 async def start_engine(req: EngineRequest):
     if req.userId in user_tasks:
-        return {"message": f"Engine already running for User {req.userId}"}
-    
-    manager = StrategyManager(req.userId, req.accessToken, req.clientId, req.targetPriceLimit)
+        # Stop existing first to update params
+        if req.userId in user_managers: del user_managers[req.userId]
+        user_tasks[req.userId].cancel()
+        del user_tasks[req.userId]
+        await asyncio.sleep(0.5)
+
+    manager = StrategyManager(
+        req.userId, req.accessToken, req.clientId, 
+        req.targetPriceLimit, req.symbol, req.securityId, 
+        req.segment, req.expiry
+    )
     user_managers[req.userId] = manager
     task = asyncio.create_task(run_user_loop(req.userId))
     user_tasks[req.userId] = task
     
-    return {"message": f"Engine started for User {req.userId}"}
+    return {"message": f"Engine started for User {req.userId} on {req.symbol}"}
 
 @app.post("/engine/stop")
-async def stop_engine(req: EngineRequest):
-    user_id = req.userId
+async def stop_engine(req: Dict[str, Any]):
+    user_id = req.get("userId")
     if user_id in user_managers:
         del user_managers[user_id]
     if user_id in user_tasks:

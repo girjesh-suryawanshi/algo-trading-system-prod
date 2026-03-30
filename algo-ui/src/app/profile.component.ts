@@ -32,10 +32,10 @@ import { Router } from '@angular/router';
                   <label>Dhan Client ID</label>
                   <input type="text" name="dhanClientId" [(ngModel)]="profile.dhanClientId" placeholder="Enter Client ID">
                 </div>
-              </div>
-              <div class="form-group">
-                <label>Dhan Access Token</label>
-                <input type="password" name="dhanAccessToken" [(ngModel)]="profile.dhanAccessToken" placeholder="Enter Access Token">
+                <div class="form-group">
+                  <label>Dhan Access Token</label>
+                  <input type="password" name="dhanAccessToken" [(ngModel)]="profile.dhanAccessToken" placeholder="Enter Access Token">
+                </div>
               </div>
             </div>
 
@@ -46,12 +46,12 @@ import { Router } from '@angular/router';
                   <label>Bot Token</label>
                   <input type="password" name="telegramBotToken" [(ngModel)]="profile.telegramBotToken" placeholder="Enter Bot Token">
                 </div>
-              <div class="form-group">
-                <label>Chat ID</label>
-                <input type="text" name="telegramChatId" [(ngModel)]="profile.telegramChatId" placeholder="Enter Chat ID">
+                <div class="form-group">
+                  <label>Chat ID</label>
+                  <input type="text" name="telegramChatId" [(ngModel)]="profile.telegramChatId" placeholder="Enter Chat ID">
+                </div>
               </div>
             </div>
-          </div>
 
             <div class="section">
               <h3>Strategy Settings</h3>
@@ -86,29 +86,20 @@ import { Router } from '@angular/router';
     }
 
     .profile-container { max-width: 900px; margin: 0 auto; padding: 2rem; }
-
     .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3rem; }
-
     .logo { font-weight: 800; font-size: 1.2rem; }
     .logo span { color: var(--primary); }
-
     .btn-back { background: transparent; border: 1px solid var(--glass-border); color: #888; padding: 0.6rem 1rem; border-radius: 8px; cursor: pointer; transition: 0.3s; }
     .btn-back:hover { color: white; border-color: white; }
-
     .glass-card { background: var(--glass); backdrop-filter: blur(20px); border: 1px solid var(--glass-border); border-radius: 24px; padding: 3rem; }
-
     h2 { font-size: 2rem; margin-bottom: 0.5rem; }
     .subtitle { color: #94a3b8; margin-bottom: 3rem; }
-
     .section { margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid var(--glass-border); }
     h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1.5rem; text-transform: uppercase; letter-spacing: 1px; }
-
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
-
     .form-group { margin-bottom: 1.5rem; }
     label { display: block; color: #cbd5e1; font-size: 0.8rem; font-weight: 700; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; }
-
-    input {
+    input, select {
       width: 100%;
       padding: 1rem;
       background: rgba(0, 0, 0, 0.2);
@@ -118,9 +109,9 @@ import { Router } from '@angular/router';
       font-size: 0.9rem;
       transition: 0.3s;
     }
-
-    input:focus { outline: none; border-color: var(--primary); }
-
+    input:focus, select:focus { outline: none; border-color: var(--primary); }
+    select option { background: #1a1b26; color: white; }
+    .form-help { font-size: 0.75rem; color: #64748b; margin-top: 0.4rem; }
     .btn-save {
       background: linear-gradient(135deg, var(--primary), #7000ff);
       color: white;
@@ -131,31 +122,38 @@ import { Router } from '@angular/router';
       cursor: pointer;
       transition: 0.3s;
     }
-
     .btn-save:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0, 242, 255, 0.2); }
   `]
 })
 export class ProfileComponent implements OnInit {
   profile: any = {};
   loading = false;
-  private backendUrl = `${window.location.protocol}//${window.location.hostname}:8080/api/user/profile`;
+
+
+  private baseUrl = `${window.location.protocol}//${window.location.hostname}:8080/api/user`;
 
   constructor(private http: HttpClient, private router: Router) {}
 
   ngOnInit() {
-    this.http.get(this.backendUrl).subscribe({
-      next: (data) => this.profile = data,
+    this.loadProfile();
+  }
+
+  loadProfile() {
+    this.http.get(`${this.baseUrl}/profile`).subscribe({
+      next: (data: any) => {
+        this.profile = data;
+      },
       error: () => alert('Failed to load profile')
     });
   }
 
   saveProfile() {
     this.loading = true;
-    this.http.put(this.backendUrl, this.profile).subscribe({
+    this.http.put(`${this.baseUrl}/profile`, this.profile).subscribe({
       next: () => {
         alert('Profile saved successfully');
         this.loading = false;
-        this.ngOnInit(); // Refresh to get the masks back
+        this.loadProfile();
       },
       error: (err) => {
         const msg = err.error?.message || err.statusText || 'Unknown error';

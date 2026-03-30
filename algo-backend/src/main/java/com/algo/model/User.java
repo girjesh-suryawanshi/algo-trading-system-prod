@@ -32,6 +32,12 @@ public class User {
     @Builder.Default
     private Double targetPriceLimit = 12.0;
 
+    // Trading Preferences
+    private String tradingInstrument;
+    private String preferredExpiry;
+    private Integer instrumentId;
+    private String exchangeSegment;
+
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private AuthProvider provider = AuthProvider.LOCAL;

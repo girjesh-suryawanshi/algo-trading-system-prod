@@ -20,7 +20,7 @@ public class BacktestController {
     private final UserRepository userRepo;
     private final EncryptionService encryptionService;
     private final RestTemplate restTemplate = new RestTemplate();
-    private final String PYTHON_ENGINE_URL = "http://localhost:8000/backtest";
+    private final String PYTHON_ENGINE_URL = "http://python:8000/backtest";
 
     private User getCurrentUser() {
         String email = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();

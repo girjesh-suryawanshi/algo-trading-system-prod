@@ -9,6 +9,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -18,6 +21,8 @@ public class ProfileController {
 
     private final UserRepository userRepo;
     private final EncryptionService encryptionService;
+    private final RestTemplate restTemplate = new RestTemplate();
+    private final String pythonUrl = "http://python:8000";
 
     private User getCurrentUser() {
         String email = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
@@ -35,11 +40,15 @@ public class ProfileController {
                 .telegramBotToken(mask(user.getTelegramBotToken()))
                 .telegramChatId(mask(user.getTelegramChatId()))
                 .targetPriceLimit(user.getTargetPriceLimit())
+                .tradingInstrument(user.getTradingInstrument())
+                .preferredExpiry(user.getPreferredExpiry())
+                .instrumentId(user.getInstrumentId())
+                .exchangeSegment(user.getExchangeSegment())
                 .build());
     }
 
     @PutMapping("/profile")
-    public ResponseEntity<String> updateProfile(@RequestBody UserProfileDTO dto) {
+    public ResponseEntity<Object> updateProfile(@RequestBody UserProfileDTO dto) {
         log.info("Updating profile for user: {}", dto.getEmail());
         User user = getCurrentUser();
         
@@ -66,11 +75,81 @@ public class ProfileController {
                 user.setTelegramChatId(encryptionService.encrypt(dto.getTelegramChatId()));
             }
 
+            user.setTradingInstrument(dto.getTradingInstrument());
+            user.setPreferredExpiry(dto.getPreferredExpiry());
+            user.setInstrumentId(dto.getInstrumentId());
+            user.setExchangeSegment(dto.getExchangeSegment());
+
             userRepo.save(user);
-            return ResponseEntity.ok("Profile updated successfully");
+            return ResponseEntity.ok(Map.of("message", "Profile updated successfully"));
         } catch (Exception e) {
             log.error("Failed to update profile", e);
-            return ResponseEntity.internalServerError().body("Failed to update profile: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(Map.of("message", "Failed to update profile: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/instruments")
+    public ResponseEntity<Object> getInstruments() {
+        try {
+            Object response = restTemplate.getForObject(pythonUrl + "/instruments", Object.class);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of("data", Map.of("NIFTY", 13, "BANKNIFTY", 25, "FINNIFTY", 27, "SENSEX", 1))); 
+        }
+    }
+
+    @PostMapping("/fetch-expiries")
+    public ResponseEntity<Object> fetchExpiries(@RequestBody Map<String, Object> req) {
+        User user = getCurrentUser();
+        try {
+            Map<String, Object> payload = Map.of(
+                "accessToken", encryptionService.decrypt(user.getDhanAccessToken()),
+                "clientId", encryptionService.decrypt(user.getDhanClientId()),
+                "securityId", req.get("securityId"),
+                "segment", req.get("segment")
+            );
+            Object response = restTemplate.postForObject(pythonUrl + "/fetch-expiries", payload, Object.class);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Error fetching expiries from python", e);
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/engine/toggle")
+    public ResponseEntity<Object> toggleEngine(@RequestBody Map<String, Object> params) {
+        User user = getCurrentUser();
+        boolean active = (boolean) params.getOrDefault("active", false);
+        String endpoint = active ? "/engine/start" : "/engine/stop";
+        
+        Map<String, Object> payload = Map.of(
+            "userId", user.getId(),
+            "accessToken", encryptionService.decrypt(user.getDhanAccessToken()),
+            "clientId", encryptionService.decrypt(user.getDhanClientId()),
+            "targetPriceLimit", user.getTargetPriceLimit(),
+            "symbol", params.getOrDefault("symbol", "NIFTY"),
+            "securityId", String.valueOf(params.getOrDefault("securityId", "13")),
+            "segment", params.getOrDefault("segment", "IDX_I"),
+            "expiry", params.getOrDefault("expiry", "")
+        );
+
+        try {
+            Object response = restTemplate.postForObject(pythonUrl + endpoint, payload, Object.class);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Error toggling engine", e);
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/engine/status")
+    public ResponseEntity<Object> getEngineStatus() {
+        User user = getCurrentUser();
+        try {
+            Object response = restTemplate.getForObject(pythonUrl + "/engine/status/" + user.getId(), Object.class);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of("auto_running", false));
         }
     }
 

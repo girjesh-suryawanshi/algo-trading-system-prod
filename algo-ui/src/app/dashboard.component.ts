@@ -20,6 +20,16 @@ import { Router } from '@angular/router';
       </div>
 
       <div class="status-panel">
+        <div class="market-selector" *ngIf="activeTab === 'LIVE'">
+          <select [(ngModel)]="selectedInstrument" (change)="onInstrumentChange(selectedInstrument)" [disabled]="autoRunning">
+            <option *ngFor="let inst of getInstrumentList()" [value]="inst">{{ inst }}</option>
+          </select>
+          <select [(ngModel)]="selectedExpiry" [disabled]="autoRunning || loadingExpiries || expiries.length === 0">
+            <option value="">{{ loadingExpiries ? 'Fetching...' : (expiries.length === 0 ? 'No Expiry' : 'Select Expiry') }}</option>
+            <option *ngFor="let exp of expiries" [value]="exp">{{ exp }}</option>
+          </select>
+        </div>
+
         <div class="user-info">
           <button routerLink="/profile" class="btn-profile">Settings</button>
           <button (click)="onLogout()" class="btn-logout">Logout</button>
@@ -257,6 +267,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   totalPnL = 0;
   activeTradesCount = 0;
   
+  // Market Selection
+  instruments: any = {};
+  expiries: string[] = [];
+  selectedInstrument: string = 'NIFTY';
+  selectedExpiry: string = '';
+  loadingExpiries: boolean = false;
+  expiryError: string | null = null;
+
   // Python Engine Tracking Data
   autoRunning = false;
   strategyState: any = {};
@@ -283,6 +301,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   backtestResults: any = null;
 
   private sub?: Subscription;
+  private baseUrl = `${window.location.protocol}//${window.location.hostname}:8080/api`;
 
   constructor(private http: HttpClient, private auth: AuthService, private router: Router) {}
 
@@ -292,8 +311,50 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    this.fetchInstruments();
     this.refreshData();
     this.sub = interval(3000).subscribe(() => this.refreshData());
+  }
+
+  fetchInstruments() {
+    this.http.get<any>(`${this.baseUrl}/user/instruments`).subscribe({
+      next: (res) => {
+        this.instruments = res.data || {};
+        this.onInstrumentChange(this.selectedInstrument);
+      }
+    });
+  }
+
+  getInstrumentList() {
+    return Object.keys(this.instruments);
+  }
+
+  onInstrumentChange(symbol: string) {
+    const inst = this.instruments[symbol];
+    if (!inst) return;
+
+    this.loadingExpiries = true;
+    this.expiryError = null;
+    this.expiries = [];
+    this.selectedExpiry = "";
+
+    this.http.post<any>(`${this.baseUrl}/user/fetch-expiries`, {
+      securityId: inst.id,
+      segment: inst.segment
+    }).subscribe({
+      next: (res) => {
+        this.loadingExpiries = false;
+        this.expiries = res.data || [];
+        if (this.expiries.length > 0) {
+          this.selectedExpiry = this.expiries[0];
+        }
+      },
+      error: (err) => {
+        this.loadingExpiries = false;
+        this.expiryError = "Failed to load expiries";
+        console.error('Expiry fetch failed:', err);
+      }
+    });
   }
 
   ngOnDestroy() {
@@ -301,9 +362,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   refreshData() {
-    if (this.activeTab !== 'LIVE') return; // Pause polling if in backtest view
+    if (this.activeTab !== 'LIVE') return; 
     
-    this.http.get<any[]>('http://localhost:8080/api/trades').subscribe({
+    this.http.get<any[]>(`${this.baseUrl}/trades`).subscribe({
       next: (res) => {
         this.trades = res.reverse();
         this.calculateMetrics();
@@ -311,7 +372,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       error: () => {}
     });
 
-    this.http.get<any>('http://localhost:8080/api/engine/status').subscribe({
+    this.http.get<any>(`${this.baseUrl}/user/engine/status`).subscribe({
       next: (res) => {
         this.autoRunning = res.auto_running;
         this.strategyState = res.strategy_state || {};
@@ -335,17 +396,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   toggleKillSwitch() {
     this.killSwitch = !this.killSwitch;
-    this.http.post(`http://localhost:8080/api/kill?active=${this.killSwitch}`, {}).subscribe();
+    this.http.post(`${this.baseUrl}/kill?active=${this.killSwitch}`, {}).subscribe();
   }
 
   toggleEngine() {
     const nextState = !this.autoRunning;
-    this.http.post(`http://localhost:8080/api/engine/toggle?active=${nextState}`, {}).subscribe({
+    const inst = this.instruments[this.selectedInstrument];
+
+    const payload = {
+      active: nextState,
+      symbol: this.selectedInstrument,
+      securityId: inst?.id?.toString() || "13",
+      segment: inst?.segment || "IDX_I",
+      expiry: this.selectedExpiry
+    };
+
+    this.http.post(`${this.baseUrl}/user/engine/toggle`, payload).subscribe({
       next: () => {
         this.autoRunning = nextState;
       },
       error: (err) => {
-        alert("Failed to toggle engine. Check your Profile API keys.");
+        alert("Failed to toggle engine. Check your Profile API keys and trading settings.");
       }
     });
   }
@@ -376,7 +447,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         strategyName: "Manual"
     };
 
-    this.http.post('http://localhost:8080/api/trade', payload).subscribe({
+    this.http.post(`${this.baseUrl}/trade`, payload).subscribe({
       next: () => {
         this.isSubmitting = false;
         this.manualTrade.strike = null;
@@ -398,7 +469,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.backtestError = null;
     this.backtestResults = null;
     
-    this.http.post<any>('http://localhost:8080/api/backtest/run', this.backtestReq).subscribe({
+    this.http.post<any>(`${this.baseUrl}/backtest/run`, this.backtestReq).subscribe({
       next: (res) => {
         this.isBacktesting = false;
         if (res.error) {

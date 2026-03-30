@@ -16,4 +16,10 @@ public class UserProfileDTO {
     private String telegramChatId;
     
     private Double targetPriceLimit;
+    
+    // Trading Preferences
+    private String tradingInstrument;
+    private String preferredExpiry;
+    private Integer instrumentId;
+    private String exchangeSegment;
 }
