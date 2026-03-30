@@ -1,5 +1,6 @@
 package com.algo.service;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -7,6 +8,7 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
 import java.util.Base64;
 
+@Slf4j
 @Service
 public class EncryptionService {
 
@@ -24,7 +26,8 @@ public class EncryptionService {
             byte[] encrypted = cipher.doFinal(value.getBytes());
             return Base64.getEncoder().encodeToString(encrypted);
         } catch (Exception e) {
-            throw new RuntimeException("Encryption failed", e);
+            log.error("Encryption failed for value of length {}", value.length(), e);
+            throw new RuntimeException("Encryption failed: " + e.getMessage(), e);
         }
     }
 
@@ -38,7 +41,8 @@ public class EncryptionService {
             byte[] decrypted = cipher.doFinal(decoded);
             return new String(decrypted);
         } catch (Exception e) {
-            throw new RuntimeException("Decryption failed", e);
+            log.error("Decryption failed", e);
+            throw new RuntimeException("Decryption failed: " + e.getMessage(), e);
         }
     }
 }

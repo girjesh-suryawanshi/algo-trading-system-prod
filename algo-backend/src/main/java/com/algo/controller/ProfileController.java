@@ -5,10 +5,12 @@ import com.algo.model.UserProfileDTO;
 import com.algo.repository.UserRepository;
 import com.algo.service.EncryptionService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/user")
 @RequiredArgsConstructor
@@ -38,34 +40,50 @@ public class ProfileController {
 
     @PutMapping("/profile")
     public ResponseEntity<String> updateProfile(@RequestBody UserProfileDTO dto) {
+        log.info("Updating profile for user: {}", dto.getEmail());
         User user = getCurrentUser();
-        user.setName(dto.getName());
+        
+        if (dto.getName() != null && !dto.getName().isEmpty()) {
+            user.setName(dto.getName());
+        }
+        
         if (dto.getTargetPriceLimit() != null) {
             user.setTargetPriceLimit(dto.getTargetPriceLimit());
         }
         
-        // Only update if not masked (user entered new value)
-        if (dto.getDhanAccessToken() != null && !dto.getDhanAccessToken().contains("••••")) {
-            user.setDhanAccessToken(encryptionService.encrypt(dto.getDhanAccessToken()));
-        }
-        if (dto.getDhanClientId() != null && !dto.getDhanClientId().contains("••••")) {
-            user.setDhanClientId(encryptionService.encrypt(dto.getDhanClientId()));
-        }
-        if (dto.getTelegramBotToken() != null && !dto.getTelegramBotToken().contains("••••")) {
-            user.setTelegramBotToken(encryptionService.encrypt(dto.getTelegramBotToken()));
-        }
-        if (dto.getTelegramChatId() != null && !dto.getTelegramChatId().contains("••••")) {
-            user.setTelegramChatId(encryptionService.encrypt(dto.getTelegramChatId()));
-        }
+        try {
+            // Only update if not masked (user entered new value)
+            if (dto.getDhanAccessToken() != null && !dto.getDhanAccessToken().contains("••••")) {
+                user.setDhanAccessToken(encryptionService.encrypt(dto.getDhanAccessToken()));
+            }
+            if (dto.getDhanClientId() != null && !dto.getDhanClientId().contains("••••")) {
+                user.setDhanClientId(encryptionService.encrypt(dto.getDhanClientId()));
+            }
+            if (dto.getTelegramBotToken() != null && !dto.getTelegramBotToken().contains("••••")) {
+                user.setTelegramBotToken(encryptionService.encrypt(dto.getTelegramBotToken()));
+            }
+            if (dto.getTelegramChatId() != null && !dto.getTelegramChatId().contains("••••")) {
+                user.setTelegramChatId(encryptionService.encrypt(dto.getTelegramChatId()));
+            }
 
-        userRepo.save(user);
-        return ResponseEntity.ok("Profile updated successfully");
+            userRepo.save(user);
+            return ResponseEntity.ok("Profile updated successfully");
+        } catch (Exception e) {
+            log.error("Failed to update profile", e);
+            return ResponseEntity.internalServerError().body("Failed to update profile: " + e.getMessage());
+        }
     }
 
     private String mask(String value) {
         if (value == null || value.isEmpty()) return "";
-        String decrypted = encryptionService.decrypt(value);
-        if (decrypted.length() <= 4) return "••••";
-        return "••••" + decrypted.substring(decrypted.length() - 4);
+        try {
+            String decrypted = encryptionService.decrypt(value);
+            if (decrypted == null || decrypted.isEmpty()) return "";
+            if (decrypted.length() <= 4) return "••••";
+            return "••••" + decrypted.substring(decrypted.length() - 4);
+        } catch (Exception e) {
+            log.warn("Failed to decrypt field during masking: {}", e.getMessage());
+            return ""; // Return empty instead of crashing the whole profile load
+        }
     }
 }

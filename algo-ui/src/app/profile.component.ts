@@ -18,6 +18,14 @@ import { Router } from '@angular/router';
 
           <form (ngSubmit)="saveProfile()">
             <div class="section">
+              <h3>General Information</h3>
+              <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" name="name" [(ngModel)]="profile.name" placeholder="Enter your name">
+              </div>
+            </div>
+
+            <div class="section">
               <h3>Dhan Exchange Connection</h3>
               <div class="form-row">
                 <div class="form-group">
@@ -130,11 +138,12 @@ import { Router } from '@angular/router';
 export class ProfileComponent implements OnInit {
   profile: any = {};
   loading = false;
+  private backendUrl = `${window.location.protocol}//${window.location.hostname}:8080/api/user/profile`;
 
   constructor(private http: HttpClient, private router: Router) {}
 
   ngOnInit() {
-    this.http.get('http://localhost:8080/api/user/profile').subscribe({
+    this.http.get(this.backendUrl).subscribe({
       next: (data) => this.profile = data,
       error: () => alert('Failed to load profile')
     });
@@ -142,13 +151,15 @@ export class ProfileComponent implements OnInit {
 
   saveProfile() {
     this.loading = true;
-    this.http.put('http://localhost:8080/api/user/profile', this.profile).subscribe({
+    this.http.put(this.backendUrl, this.profile).subscribe({
       next: () => {
         alert('Profile saved successfully');
         this.loading = false;
+        this.ngOnInit(); // Refresh to get the masks back
       },
-      error: () => {
-        alert('Failed to save profile');
+      error: (err) => {
+        const msg = err.error?.message || err.statusText || 'Unknown error';
+        alert('Failed to save profile: ' + msg);
         this.loading = false;
       }
     });
