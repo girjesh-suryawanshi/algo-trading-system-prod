@@ -16,49 +16,61 @@ public class RiskService {
 
     private final TradeRepository tradeRepository;
     private final UserRepository userRepo;
+    private final VolatilityService vixService;
+    private final NewsService newsService;
     
     private boolean killSwitch = false;
     private static final double DEFAULT_MAX_DAILY_LOSS = 5000.0;
     private static final int DEFAULT_MAX_TRADES_PER_DAY = 10;
+    private static final double DEFAULT_VIX_THRESHOLD = 25.0;
+    private static final int DEFAULT_NEWS_BUFFER = 30;
 
     public boolean isSafeToTrade(Trade trade) {
         if (killSwitch) return false;
 
         // Try to get user settings from the trade's user or the first user in DB
-        User user = null;
-        if (trade.getUser() != null) {
-            user = trade.getUser();
-        } else {
-            user = userRepo.findAll().stream().findFirst().orElse(null);
-        }
+        User user = (trade.getUser() != null) ? trade.getUser() : userRepo.findAll().stream().findFirst().orElse(null);
 
         double maxLoss = (user != null) ? user.getMaxDailyLoss() : DEFAULT_MAX_DAILY_LOSS;
         int maxTrades = (user != null) ? user.getMaxTradesPerDay() : DEFAULT_MAX_TRADES_PER_DAY;
+        double vixLimit = (user != null) ? user.getVixThreshold() : DEFAULT_VIX_THRESHOLD;
+        int newsBuffer = (user != null) ? user.getNewsBufferMinutes() : DEFAULT_NEWS_BUFFER;
+        boolean newsKillSwitchEnabled = (user != null) && user.getNewsKillSwitchActive();
 
-        // 1. Time Filter (9:20 AM - 3:20 PM for Indian Markets)
+        // 1. Time Filter (9:20 AM - 3:20 PM)
         LocalTime now = LocalTime.now();
         if (now.isBefore(LocalTime.of(9, 20)) || now.isAfter(LocalTime.of(15, 20))) {
             return false;
         }
 
-        // 2. Max Trades Check
+        // 2. India VIX Filter
+        if (vixService.getCurrentVix() > vixLimit) {
+            return false;
+        }
+
+        // 3. Economic News Kill Switch
+        if (newsKillSwitchEnabled && newsService.isNewsPending(newsBuffer)) {
+            return false;
+        }
+
+        // 4. Max Trades Check
         long count = tradeRepository.count(); 
         if (count >= maxTrades) {
             return false;
         }
 
-        // 3. Daily Loss Check
+        // 5. Daily Loss Check
         List<Trade> todayTrades = tradeRepository.findAll();
         double currentPnl = todayTrades.stream()
                 .filter(t -> t.getPnl() != null)
                 .mapToDouble(Trade::getPnl)
                 .sum();
         
-        if (currentPnl <= -Math.abs(maxLoss)) { // Ensure it's treated as a negative floor
+        if (currentPnl <= -Math.abs(maxLoss)) {
             return false;
         }
 
-        // 4. Validate One Trade Per Strike / No Duplicates
+        // 6. Validate One Trade Per Strike
         boolean hasDuplicateOrActive = todayTrades.stream()
                 .anyMatch(t -> t.getStrike() != null &&
                         t.getStrike().equals(trade.getStrike()) &&

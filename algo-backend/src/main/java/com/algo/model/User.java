@@ -51,5 +51,14 @@ public class User {
     @Builder.Default
     private Double trailingStopLossStep = 1.0;
 
+    @Builder.Default
+    private Double vixThreshold = 25.0;
+
+    @Builder.Default
+    private Boolean newsKillSwitchActive = true;
+
+    @Builder.Default
+    private Integer newsBufferMinutes = 30;
+
     private String role;
 }

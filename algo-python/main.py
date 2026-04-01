@@ -109,6 +109,31 @@ async def get_engine_status(user_id: int):
         "strategy_state": state
     }
 
+@app.get("/fetch-news")
+async def fetch_news():
+    """
+    Fetches high-impact economic news. 
+    In a real scenario, this would scrape or call a News API.
+    """
+    # Mocking a high-impact event for today at 2:30 PM (IST)
+    # Using a 24h format for simplicity
+    return {
+        "events": [
+            {
+                "title": "RBI Monetary Policy Meeting",
+                "time": "14:30", 
+                "impact": "HIGH",
+                "currency": "INR"
+            },
+            {
+                "title": "US CPI Data",
+                "time": "19:00",
+                "impact": "HIGH",
+                "currency": "USD"
+            }
+        ]
+    }
+
 # --- Backtest API ---
 class BacktestRequest(BaseModel):
     fromDate: str

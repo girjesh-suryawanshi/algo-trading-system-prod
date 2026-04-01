@@ -27,9 +27,12 @@ class StrategyManager:
     def select_best_strikes(self, options):
         best_options = {}
         for opt_type in ['CE', 'PE']:
-            eligible = [o for o in options if o.get('ltp', 0) <= self.target_price_limit and o.get('optionType') == opt_type]
+            # Extra safety: Ensure o is a dict before calling .get()
+            eligible = [o for o in options if isinstance(o, dict) and o.get('ltp', 0) <= self.target_price_limit and o.get('optionType') == opt_type]
+            print(f">>> [DEBUG] User {self.user_id} {opt_type}: Found {len(eligible)} eligible strikes (Price <= {self.target_price_limit})")
             if eligible:
-                best_options[opt_type] = sorted(eligible, key=lambda x: x['ltp'], reverse=True)[0]
+                best_options[opt_type] = sorted(eligible, key=lambda x: x.get('ltp', 0), reverse=True)[0]
+                print(f">>> [DEBUG] User {self.user_id} {opt_type}: Selected Strike {best_options[opt_type].get('strikePrice')} at LTP {best_options[opt_type].get('ltp')}")
         return best_options
 
     def manage_trailing_sl(self, symbol_key, current_ltp):
@@ -66,7 +69,13 @@ class StrategyManager:
                 pass
             else:
                 history = get_historical_data(self.access_token, self.client_id, security_id, self.segment, days=7)
-                lows = [c['low'] for c in history.get('data', [])]
+                
+                # Robustness: Check if history is a dictionary
+                if not isinstance(history, dict):
+                    print(f"Error: Historical data is not a dict for {security_id}: {type(history)}")
+                    history = {"data": []}
+                    
+                lows = [c['low'] for c in history.get('data', []) if isinstance(c, dict) and 'low' in c]
                 weekly_low = min(lows) if lows else current_ltp
                 
                 self.state[symbol_key] = {
@@ -114,7 +123,18 @@ class StrategyManager:
 
     def run_strategy(self):
         data = get_option_chain(self.access_token, self.client_id, self.security_id, self.segment, self.expiry)
-        options = data.get('data', [])
+        
+        # Robustness: Check if data is a dictionary
+        if not isinstance(data, dict):
+            print(f"Error: Option chain data is not a dict: {type(data)}")
+            data = {"data": []}
+            
+        options = data.get('data', []) if isinstance(data, dict) else []
+        if not isinstance(options, list):
+            print(f"Error: Options data is not a list for user {self.user_id}: {type(options)} - Content: {options}")
+            options = []
+            
+        self.state['option_chain'] = options # Store for UI
         best_options = self.select_best_strikes(options)
         
         if not best_options and not self.active_trades:

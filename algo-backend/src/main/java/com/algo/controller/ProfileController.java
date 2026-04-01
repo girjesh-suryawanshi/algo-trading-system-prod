@@ -47,6 +47,9 @@ public class ProfileController {
                 .maxDailyLoss(user.getMaxDailyLoss())
                 .maxTradesPerDay(user.getMaxTradesPerDay())
                 .trailingStopLossStep(user.getTrailingStopLossStep())
+                .vixThreshold(user.getVixThreshold())
+                .newsKillSwitchActive(user.getNewsKillSwitchActive())
+                .newsBufferMinutes(user.getNewsBufferMinutes())
                 .build());
     }
 
@@ -73,6 +76,18 @@ public class ProfileController {
         
         if (dto.getTrailingStopLossStep() != null) {
             user.setTrailingStopLossStep(dto.getTrailingStopLossStep());
+        }
+
+        if (dto.getVixThreshold() != null) {
+            user.setVixThreshold(dto.getVixThreshold());
+        }
+
+        if (dto.getNewsKillSwitchActive() != null) {
+            user.setNewsKillSwitchActive(dto.getNewsKillSwitchActive());
+        }
+
+        if (dto.getNewsBufferMinutes() != null) {
+            user.setNewsBufferMinutes(dto.getNewsBufferMinutes());
         }
         
         try {

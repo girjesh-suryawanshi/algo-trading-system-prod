@@ -26,4 +26,8 @@ public class UserProfileDTO {
     private Double maxDailyLoss;
     private Integer maxTradesPerDay;
     private Double trailingStopLossStep;
+    
+    private Double vixThreshold;
+    private Boolean newsKillSwitchActive;
+    private Integer newsBufferMinutes;
 }

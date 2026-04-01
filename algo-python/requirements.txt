@@ -4,3 +4,5 @@ requests
 pandas
 python-dotenv
 aiohttp
+certifi
+urllib3

@@ -10,6 +10,19 @@ def get_headers(access_token, client_id):
         "Content-Type": "application/json"
     }
 
+def _safe_json(res, default_val=None):
+    if default_val is None:
+        default_val = {"data": []}
+    try:
+        data = res.json()
+        if isinstance(data, dict):
+            return data
+        print(f"Unexpected JSON response type: {type(data)} - {data}")
+        return default_val
+    except Exception as e:
+        print(f"JSON Parse Error: {e} - Response Text: {res.text[:100]}")
+        return default_val
+
 def get_expiry_list(access_token, client_id, security_id, segment="IDX_I"):
     url = f"{BASE_URL}/optionchain/expirylist"
     payload = {
@@ -19,7 +32,10 @@ def get_expiry_list(access_token, client_id, security_id, segment="IDX_I"):
     try:
         res = requests.post(url, json=payload, headers=get_headers(access_token, client_id), timeout=10)
         if res.status_code == 200:
-            return res.json().get('data', [])
+            data = _safe_json(res)
+            if isinstance(data, dict):
+                return data.get('data', [])
+            return []
         print(f"Dhan API Error (Expiry List): {res.status_code} - {res.text}")
     except Exception as e:
         print(f"Error fetching expiry list: {e}")
@@ -35,7 +51,31 @@ def get_option_chain(access_token, client_id, security_id, segment, expiry):
     try:
         res = requests.post(url, json=payload, headers=get_headers(access_token, client_id), timeout=10)
         if res.status_code == 200:
-            return res.json()
+            data = _safe_json(res)
+            # Official V2 structure: data['data']['oc']
+            data_obj = data.get('data', {})
+            oc_dict = data_obj.get('oc', {})
+            
+            # Normalization: If it's a dictionary keyed by strike prices, flatten it
+            if isinstance(oc_dict, dict):
+                flattened = []
+                for strike_str, pairs in oc_dict.items():
+                    try:
+                        strike_price = float(strike_str)
+                        for opt_key, info in pairs.items():
+                            if isinstance(info, dict):
+                                flattened.append({
+                                    'strikePrice': strike_price,
+                                    'ltp': info.get('last_price', 0),
+                                    'optionType': opt_key.upper(),
+                                    'securityId': info.get('security_id'),
+                                    'volume': info.get('volume', 0),
+                                    'oi': info.get('oi', 0)
+                                })
+                    except (ValueError, TypeError):
+                        continue
+                return {'data': flattened}
+            return data
         print(f"Dhan API Error (Option Chain): {res.status_code} - {res.text}")
         return {"data": []}
     except Exception as e:
@@ -58,7 +98,7 @@ def get_historical_data(access_token, client_id, security_id, segment, days=7):
     try:
         res = requests.post(url, json=payload, headers=get_headers(access_token, client_id), timeout=10)
         if res.status_code == 200:
-            return res.json()
+            return _safe_json(res)
         print(f"Dhan API Error (Historical): {res.status_code} - {res.text}")
         return {"data": []}
     except Exception as e:
@@ -70,7 +110,10 @@ def get_ltp(access_token, client_id, security_id):
     try:
         res = requests.get(url, headers=get_headers(access_token, client_id), timeout=5)
         if res.status_code == 200:
-            return res.json().get('data', {}).get('ltp', 0)
+            data = _safe_json(res, default_val={"data": {"ltp": 0}})
+            if isinstance(data, dict):
+                return data.get('data', {}).get('ltp', 0)
+            return 0
         return 0
     except Exception:
         return 0

@@ -35,8 +35,9 @@ async def fetch_strike_data_with_retry(session, strike_relative, opt_type, from_
                     data = await response.json()
                     return data, opt_type
                 elif response.status == 429:
-                    print(f"Rate limited (429) on {strike_relative} {opt_type}. Waiting 2s (Attempt {attempt+1}/{retries+1})")
-                    await asyncio.sleep(2)
+                    wait_time = 5 * (attempt + 1)
+                    print(f"Rate limited (429) on {strike_relative} {opt_type}. Waiting {wait_time}s (Attempt {attempt+1}/{retries+1})")
+                    await asyncio.sleep(wait_time)
                     continue
                 else:
                     resp_text = await response.text()
@@ -62,7 +63,7 @@ async def fetch_historical_chain(from_date: str, to_date: str, access_token: str
                 print(f">>> [BACKTEST] Progress: {count}/{total_tasks} | {strike} {opt_type}...", flush=True)
                 res, o_type = await fetch_strike_data_with_retry(session, strike, opt_type, from_date, to_date, access_token, client_id)
                 results.append((res, o_type))
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(2.0) # Increased delay to avoid 429
             
         for res, opt_type in results:
             if not res or 'data' not in res:

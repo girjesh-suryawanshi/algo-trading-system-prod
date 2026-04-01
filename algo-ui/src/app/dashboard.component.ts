@@ -8,305 +8,272 @@ import { Router } from '@angular/router';
   selector: 'app-dashboard',
   styleUrls: ['./dashboard.component.css'],
   template: `
-  <div class="dashboard dark-theme">
-    <header class="glass-header">
-      <div class="brand">
-        <h1>Lumina<span class="neon-text">Quant</span></h1>
-      </div>
-      
-      <div class="tabs">
-        <button [class.active-tab]="activeTab === 'LIVE'" (click)="activeTab = 'LIVE'">LIVE TERMINAL</button>
-        <button [class.active-tab]="activeTab === 'BACKTEST'" (click)="activeTab = 'BACKTEST'">BACKTEST LAB</button>
+  <div class="dashboard-container">
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="logo-text">Lumina<span class="logo-accent">Quant</span></span>
       </div>
 
-      <div class="status-panel">
-        <div class="market-selector" *ngIf="activeTab === 'LIVE'">
-          <select [(ngModel)]="selectedInstrument" (change)="onInstrumentChange(selectedInstrument)" [disabled]="autoRunning">
-            <option *ngFor="let inst of getInstrumentList()" [value]="inst">{{ inst }}</option>
-          </select>
-          <select [(ngModel)]="selectedExpiry" [disabled]="autoRunning || loadingExpiries || expiries.length === 0">
-            <option value="">{{ loadingExpiries ? 'Fetching...' : (expiries.length === 0 ? 'No Expiry' : 'Select Expiry') }}</option>
-            <option *ngFor="let exp of expiries" [value]="exp">{{ exp }}</option>
-          </select>
+      <nav class="nav-groups">
+        <div class="nav-group">
+          <div class="group-label">Trading Console</div>
+          <button class="nav-item" [class.active]="currentView === 'TERMINAL'" (click)="currentView = 'TERMINAL'">
+            🖥️ Terminal Monitor
+          </button>
+          <button class="nav-item" [class.active]="currentView === 'OPTION_CHAIN'" (click)="currentView = 'OPTION_CHAIN'">
+            ⛓️ Option Chain
+          </button>
+          <button class="nav-item" [class.active]="currentView === 'LEDGER'" (click)="currentView = 'LEDGER'">
+            📊 Trade Ledger
+          </button>
         </div>
 
-        <div class="user-info">
-          <button routerLink="/profile" class="btn-profile">Settings</button>
-          <button (click)="onLogout()" class="btn-logout">Logout</button>
+        <div class="nav-group">
+          <div class="group-label">Analysis</div>
+          <button class="nav-item" [class.active]="currentView === 'BACKTEST'" (click)="currentView = 'BACKTEST'">
+            🧪 Backtest Lab
+          </button>
         </div>
-        <button *ngIf="activeTab === 'LIVE'" [class.active-neon]="autoRunning" [class.inactive-neon]="!autoRunning" (click)="toggleEngine()">
-          ENGINE: {{ autoRunning ? 'LIVE' : 'IDLE' }}
-        </button>
-      </div>
-    </header>
 
-    <!-- LIVE TERMINAL VIEW -->
-    <div *ngIf="activeTab === 'LIVE'" class="main-grid">
-      <!-- LEFT COLUMN -->
-      <div class="left-col">
-        <!-- STRATEGY TRACKER -->
-        <div class="glass-card">
-          <h2><i class="icon">⚡</i> Active Tracking</h2>
-          <div class="tracker-list">
-            <div *ngIf="!hasTrackedStrikes()" class="empty-state">No strikes currently matching criteria.</div>
-            <div *ngFor="let kv of getTrackedStrikes()" class="track-item" [class.executed]="kv.value.status === 'EXECUTED'">
-              <div class="track-header">
-                <span class="opt-badge" [class.ce]="kv.key === 'CE'" [class.pe]="kv.key === 'PE'">{{ kv.key }}</span>
-                <strong>{{ kv.value.strike }}</strong>
-                <span class="status-pill">{{ kv.value.status }}</span>
-              </div>
-              <div class="track-details">
-                <div class="detail-box">
-                  <small>LTP Low</small>
-                  <span>₹{{ kv.value.low | number:'1.2-2' }}</span>
+        <div class="nav-group">
+          <div class="group-label">Account Management</div>
+          <button class="nav-item" (click)="router.navigate(['/profile'])">
+            ⚙️ Settings
+          </button>
+          <button class="nav-item" (click)="onLogout()">
+            🚪 Logout
+          </button>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- RIGHT MAIN STAGE -->
+    <main class="main-stage">
+      <!-- NAVBAR -->
+      <nav class="navbar">
+        <div class="view-title">{{ currentView }}</div>
+
+        <div class="nav-actions">
+          <div class="market-selector">
+            <select [(ngModel)]="selectedInstrument" (change)="onInstrumentChange(selectedInstrument)" [disabled]="autoRunning">
+              <option *ngFor="let inst of getInstrumentList()" [value]="inst">{{ inst }}</option>
+            </select>
+            <select [(ngModel)]="selectedExpiry" [disabled]="autoRunning || loadingExpiries || expiries.length === 0">
+               <option value="">{{ loadingExpiries ? 'Fetching...' : (expiries.length === 0 ? 'No Expiry' : 'Select Expiry') }}</option>
+               <option *ngFor="let exp of expiries" [value]="exp">{{ exp }}</option>
+            </select>
+          </div>
+
+          <div class="engine-status" [class.live]="autoRunning" [class.idle]="!autoRunning" (click)="toggleEngine()">
+            <span class="status-dot" [class.pulse]="autoRunning"></span>
+            ENGINE: {{ autoRunning ? 'LIVE' : 'IDLE' }}
+          </div>
+        </div>
+      </nav>
+
+      <!-- CONTENT BODY -->
+      <section class="content-body">
+        
+        <!-- TERMINAL VIEW (Default) -->
+        <div *ngIf="currentView === 'TERMINAL'">
+          <div class="kpi-grid">
+            <div class="glass-card kpi-card">
+              <small class="text-muted">Daily PnL</small>
+              <div class="kpi-value" [class.neon-green]="totalPnL > 0" [class.neon-red]="totalPnL < 0">₹{{ totalPnL }}</div>
+            </div>
+            <div class="glass-card kpi-card">
+              <small class="text-muted">Win Rate</small>
+              <div class="kpi-value neon-blue">{{ winRate }}%</div>
+            </div>
+            <div class="glass-card kpi-card">
+              <small class="text-muted">India VIX</small>
+              <div class="kpi-value" [class.neon-red]="indiaVix > vixThreshold">{{ indiaVix | number:'1.2-2' }}</div>
+            </div>
+            <div class="glass-card kpi-card">
+              <small class="text-muted">Trades Today</small>
+              <div class="kpi-value">{{ trades.length }}</div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 340px; gap: 24px;">
+            <div class="glass-card">
+              <h3>Active Tracking</h3>
+              <div class="tracker-list mt-20">
+                <div *ngIf="getTrackedStrikes().length === 0" class="empty-state">Wait... Engine is searching for entries based on your strategy.</div>
+                <div *ngFor="let kv of getTrackedStrikes()" class="track-item" style="border: 1px solid rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; margin-bottom: 8px;">
+                   <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <strong>{{ kv.key }}: {{ kv.value.strike }}</strong>
+                      <span [style.color]="kv.value.status === 'EXECUTED' ? '#10b981' : '#94a3b8'">{{ kv.value.status }}</span>
+                   </div>
+                   <div style="font-size: 0.8rem; margin-top: 4px; color: var(--text-muted);">
+                      Target: ₹{{ kv.value.entry }} | Current LTP: ₹{{ kv.value.ltp }}
+                   </div>
                 </div>
-                <div class="detail-box">
-                  <small>Target Entry</small>
-                  <span class="neon-text">₹{{ kv.value.entry | number:'1.2-2' }}</span>
+              </div>
+            </div>
+
+            <div class="glass-card">
+               <h3>Manual Entry</h3>
+               <form (ngSubmit)="submitManualTrade()" class="manual-form mt-20" style="display: flex; flex-direction: column; gap: 12px;">
+                  <div style="display: flex; gap: 8px;">
+                    <input type="number" [(ngModel)]="manualTrade.strike" name="strike" placeholder="Strike Price" style="flex: 1;">
+                    <select [(ngModel)]="manualTrade.optionType" name="opttype" style="width: 80px;">
+                      <option value="CE">CE</option>
+                      <option value="PE">PE</option>
+                    </select>
+                  </div>
+                  <input type="number" [(ngModel)]="manualTrade.entryPrice" name="entry" placeholder="Entry Price">
+                  <input type="number" [(ngModel)]="manualTrade.qty" name="qty" placeholder="Quantity (Lots)">
+                  <button type="submit" class="btn-secondary">EXECUTE ORDER</button>
+               </form>
+            </div>
+          </div>
+        </div>
+
+        <!-- OPTION CHAIN VIEW -->
+        <div *ngIf="currentView === 'OPTION_CHAIN'">
+          <div class="glass-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+              <h3>Live Option Chain (Dhan Gateway)</h3>
+              <span class="text-muted" style="font-size: 0.8rem;">OI Data Refreshes every 3s</span>
+            </div>
+            
+            <div style="max-height: 70vh; overflow-y: auto;">
+              <table class="oc-table">
+                <thead>
+                  <tr style="background: rgba(255,255,255,0.02);">
+                    <th colspan="2" style="color: #10b981;">CALLS (CE)</th>
+                    <th style="background: #1e293b;">STRIKE</th>
+                    <th colspan="2" style="color: #f43f5e;">PUTS (PE)</th>
+                  </tr>
+                  <tr>
+                    <th>Vol</th><th>LTP</th>
+                    <th>Price</th>
+                    <th>LTP</th><th>Vol</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let row of getGroupedOptionChain()" [class.itm-row]="isITM(row.strike)">
+                    <td style="text-align: right; color: var(--text-muted);">{{ row.ce?.volume || 0 }}</td>
+                    <td style="text-align: right; color: #10b981; font-weight: 600;">₹{{ row.ce?.ltp || 0 }}</td>
+                    <td class="strike-cell">₹{{ row.strike }}</td>
+                    <td style="text-align: left; color: #f43f5e; font-weight: 600;">₹{{ row.pe?.ltp || 0 }}</td>
+                    <td style="text-align: left; color: var(--text-muted);">{{ row.pe?.volume || 0 }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- LEDGER VIEW -->
+        <div *ngIf="currentView === 'LEDGER'">
+           <div class="glass-card">
+              <h3>Trade Ledger</h3>
+              <div style="overflow-x: auto; margin-top: 20px;">
+                <table class="modern-table">
+                  <thead>
+                    <tr><th>Time</th><th>Details</th><th>Side</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Status</th></tr>
+                  </thead>
+                  <tbody>
+                     <tr *ngFor="let t of trades">
+                        <td>{{ t.createdAt | date:'HH:mm:ss' }}</td>
+                        <td>{{ t.symbol }} {{ t.strike }}</td>
+                        <td>{{ t.optionType }}</td>
+                        <td>₹{{ t.entryPrice }}</td>
+                        <td>{{ t.exitPrice ? '₹'+t.exitPrice : '-' }}</td>
+                        <td [class.neon-green]="t.pnl > 0" [class.neon-red]="t.pnl < 0">
+                           {{ t.pnl ? '₹'+t.pnl : '-' }}
+                        </td>
+                        <td>{{ t.status }}</td>
+                     </tr>
+                  </tbody>
+                </table>
+              </div>
+           </div>
+        </div>
+
+        <!-- BACKTEST VIEW -->
+        <div *ngIf="currentView === 'BACKTEST'">
+            <div class="glass-card">
+              <h3>🧪 Strategy Backtest Lab</h3>
+              <div style="display: flex; gap: 16px; align-items: flex-end; margin-top: 20px;">
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                   <small class="text-muted">From Date</small>
+                   <input type="text" [(ngModel)]="backtestReq.fromDate" placeholder="YYYY-MM-DD">
                 </div>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                   <small class="text-muted">To Date</small>
+                   <input type="text" [(ngModel)]="backtestReq.toDate" placeholder="YYYY-MM-DD">
+                </div>
+                <button (click)="runBacktest()" class="btn-secondary" [disabled]="isBacktesting">
+                  {{ isBacktesting ? 'SIMULATING...' : 'RUN SIMULATION' }}
+                </button>
               </div>
-              <div *ngIf="kv.value.status === 'EXECUTED' && kv.value.stopLoss" class="tsl-pill">
-                TSL ACTIVE: ₹{{ kv.value.stopLoss | number:'1.2-2' }}
+              
+              <div *ngIf="backtestResults" class="mt-40">
+                 <div class="kpi-grid">
+                    <div class="glass-card kpi-card">
+                       <small class="text-muted">Simulation Win Rate</small>
+                       <div class="kpi-value neon-blue">{{ backtestResults.metrics?.win_rate }}</div>
+                    </div>
+                    <div class="glass-card kpi-card">
+                       <small class="text-muted">Simulation PnL</small>
+                       <div class="kpi-value neon-green">₹{{ backtestResults.metrics?.total_pnl }}</div>
+                    </div>
+                 </div>
+                 
+                 <table class="modern-table">
+                   <thead>
+                     <tr><th>Time</th><th>Strike</th><th>Side</th><th>Entry</th><th>Exit</th><th>Result</th><th>PnL</th></tr>
+                   </thead>
+                   <tbody>
+                     <tr *ngFor="let bt of backtestResults.trades">
+                        <td>{{ bt.entry_time | slice:11:19 }}</td>
+                        <td>{{ bt.strike }}</td>
+                        <td>{{ bt.optionType }}</td>
+                        <td>₹{{ bt.entry }}</td>
+                        <td>₹{{ bt.exit_price || '-' }}</td>
+                        <td>{{ bt.result }}</td>
+                        <td [class.neon-green]="bt.pnl > 0" [class.neon-red]="bt.pnl < 0">₹{{ bt.pnl | number:'1.1-1' }}</td>
+                     </tr>
+                   </tbody>
+                 </table>
               </div>
             </div>
-          </div>
         </div>
 
-        <!-- DAILY RISK STATUS -->
-        <div class="glass-card risk-card">
-          <h2><i class="icon">🛡️</i> Daily Risk status</h2>
-          <div class="risk-metrics">
-            <div class="risk-info">
-              <small>Daily PnL</small>
-              <span [class.neon-green]="totalPnL > 0" [class.neon-red]="totalPnL < 0">
-                ₹{{ totalPnL | number:'1.0-0' }}
-              </span>
-            </div>
-            <div class="risk-info text-right">
-              <small>Max Loss Limit</small>
-              <span>₹{{ maxDailyLoss | number:'1.0-0' }}</span>
-            </div>
-          </div>
-          
-          <div class="progress-container">
-            <div class="progress-bar" 
-                 [style.width.%]="getRiskProgress()" 
-                 [ngClass]="getRiskColor()"></div>
-          </div>
-          
-          <div class="risk-metrics mt-10">
-            <div class="risk-info">
-              <small>Trades Today</small>
-              <span>{{ trades.length }} / {{ maxTradesPerDay }}</span>
-            </div>
-            <div class="risk-info text-right">
-              <small>Status</small>
-              <span [class.neon-green]="totalPnL > -maxDailyLoss" [class.neon-red]="totalPnL <= -maxDailyLoss">
-                {{ totalPnL <= -maxDailyLoss ? 'LIMIT REACHED' : 'SAFE' }}
-              </span>
-            </div>
-          </div>
-        </div>
+      </section>
 
-        <!-- MANUAL TRADE ENTRY -->
-        <div class="glass-card mt-20">
-          <h2><i class="icon">🎯</i> Manual Order</h2>
-          <form (ngSubmit)="submitManualTrade()" class="manual-form">
-            <div class="form-row">
-              <div class="form-group">
-                <label>Symbol</label>
-                <input type="text" [(ngModel)]="manualTrade.symbol" name="symbol" required>
-              </div>
-              <div class="form-group">
-                <label>Option Type</label>
-                <select [(ngModel)]="manualTrade.optionType" name="opttype" required>
-                  <option value="CE">CE</option>
-                  <option value="PE">PE</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-group">
-              <label>Strike</label>
-              <input type="number" [(ngModel)]="manualTrade.strike" name="strike" required>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Entry Price</label>
-                <input type="number" [(ngModel)]="manualTrade.entryPrice" name="entry" required>
-              </div>
-              <div class="form-group">
-                <label>Qty (Lots)</label>
-                <input type="number" [(ngModel)]="manualTrade.qty" name="qty" required>
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Stop Loss</label>
-                <input type="number" [(ngModel)]="manualTrade.stopLoss" name="sl" required>
-              </div>
-              <div class="form-group">
-                <label>Target</label>
-                <input type="number" [(ngModel)]="manualTrade.target1" name="target" required>
-              </div>
-            </div>
-            <button type="submit" class="submit-btn" [disabled]="isSubmitting">
-              {{ isSubmitting ? 'SENDING...' : 'EXECUTE TRADE' }}
-            </button>
-          </form>
+      <!-- FOOTER -->
+      <footer class="footer">
+        <div class="footer-left">
+          LuminaQuant v2.0.1 Stable | Exchange: {{ instruments[selectedInstrument]?.segment || 'IDX_I' }}
         </div>
-      </div>
-
-      <!-- RIGHT COLUMN -->
-      <div class="right-col">
-        <!-- KPI METRICS -->
-        <div class="metrics-grid">
-          <div class="glass-card kpi">
-            <h3>Win Rate</h3>
-            <p class="value gradient-text">{{ winRate }}%</p>
-          </div>
-          <div class="glass-card kpi">
-            <h3>Total PnL</h3>
-            <p class="value" [class.neon-green]="totalPnL > 0" [class.neon-red]="totalPnL < 0">
-              ₹{{ totalPnL }}
-            </p>
-          </div>
-          <div class="glass-card kpi">
-            <h3>Active Trades</h3>
-            <p class="value">{{ activeTradesCount }}</p>
-          </div>
+        <div class="footer-right">
+          Security: {{ instruments[selectedInstrument]?.id || '-' }} | Current View: {{ currentView }}
         </div>
-
-        <!-- LIVE TRADES TABLE -->
-        <div class="glass-card trade-table-container mt-20">
-          <h2><i class="icon">📊</i> Trade Ledger</h2>
-          <table class="modern-table">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Instrument</th>
-                <th>Type</th>
-                <th>Entry</th>
-                <th>Exit</th>
-                <th>PnL</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let t of trades">
-                <td>{{ t.createdAt | date:'HH:mm:ss' }}</td>
-                <td><strong>{{ t.symbol }}</strong> <span>{{ t.strike }}</span></td>
-                <td><span class="opt-badge small" [class.ce]="t.optionType === 'CE'" [class.pe]="t.optionType === 'PE'">{{ t.optionType }}</span></td>
-                <td>₹{{ t.entryPrice }}</td>
-                <td>{{ t.exitPrice ? '₹'+t.exitPrice : '-' }}</td>
-                <td [class.neon-green]="t.pnl > 0" [class.neon-red]="t.pnl < 0">
-                  <strong>{{ t.pnl ? '₹'+t.pnl : '-' }}</strong>
-                </td>
-                <td><span class="status-glow" [attr.data-status]="t.status">{{ t.status }}</span></td>
-              </tr>
-              <tr *ngIf="trades.length === 0">
-                <td colspan="7" class="empty-state text-center">No trades executed today.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-    
-    <!-- BACKTEST LAB VIEW -->
-    <div *ngIf="activeTab === 'BACKTEST'" class="main-grid">
-      <div class="left-col">
-        <div class="glass-card">
-          <h2><i class="icon">🧪</i> Simulator settings</h2>
-          <form (ngSubmit)="runBacktest()" class="manual-form">
-            <div class="form-row">
-              <div class="form-group">
-                <label>From Date (YYYY-MM-DD)</label>
-                <input type="text" [(ngModel)]="backtestReq.fromDate" name="fromDate" placeholder="2024-03-01" required>
-              </div>
-              <div class="form-group">
-                <label>To Date (YYYY-MM-DD)</label>
-                <input type="text" [(ngModel)]="backtestReq.toDate" name="toDate" placeholder="2024-03-05" required>
-              </div>
-            </div>
-            <button type="submit" class="submit-btn" [disabled]="isBacktesting">
-              {{ isBacktesting ? 'FETCHING & SIMULATING...' : 'RUN SIMULATION' }}
-            </button>
-          </form>
-          <div *ngIf="backtestError" class="mt-20 neon-red text-center" style="font-weight: 500;">
-            {{ backtestError }}
-          </div>
-          <div *ngIf="!backtestResults && !isBacktesting && !backtestError" class="empty-state mt-20 text-center">
-            Ready to fetch historical rollingoption data.
-          </div>
-        </div>
-      </div>
-      
-      <div class="right-col" *ngIf="backtestResults">
-        <div class="metrics-grid">
-          <div class="glass-card kpi">
-            <h3>Win Rate</h3>
-            <p class="value gradient-text">{{ backtestResults.metrics?.win_rate || '0%' }}</p>
-          </div>
-          <div class="glass-card kpi">
-            <h3>Total PnL</h3>
-            <p class="value neon-green">₹{{ backtestResults.metrics?.total_pnl || 0 }}</p>
-          </div>
-          <div class="glass-card kpi">
-            <h3>Total Trades</h3>
-            <p class="value">{{ backtestResults.metrics?.total_trades || 0 }}</p>
-          </div>
-        </div>
-
-        <div class="glass-card trade-table-container mt-20">
-          <h2><i class="icon">📊</i> Simulation Ledger</h2>
-          <table class="modern-table">
-            <thead>
-              <tr>
-                <th>Entry Time</th>
-                <th>Exit Time</th>
-                <th>Strike</th>
-                <th>Type</th>
-                <th>Entry</th>
-                <th>Exit</th>
-                <th>Target Hits</th>
-                <th>PnL</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let t of backtestResults.trades">
-                <td>{{ t.entry_time | slice:11:19 }}</td>
-                <td>{{ t.exit_time | slice:11:19 || '-' }}</td>
-                <td><strong>{{ t.strike }}</strong></td>
-                <td><span class="opt-badge small" [class.ce]="t.optionType === 'CE'" [class.pe]="t.optionType === 'PE'">{{ t.optionType }}</span></td>
-                <td>₹{{ t.entry }}</td>
-                <td>{{ t.exit_price ? '₹'+t.exit_price : '-' }}</td>
-                <td><span class="status-glow" [attr.data-status]="t.result">{{ t.result }}</span></td>
-                <td [class.neon-green]="t.pnl > 0" [class.neon-red]="t.pnl < 0">
-                  <strong>₹{{ t.pnl | number:'1.2-2' }}</strong>
-                </td>
-              </tr>
-              <tr *ngIf="!backtestResults.trades || backtestResults.trades.length === 0">
-                <td colspan="8" class="empty-state text-center">No trades triggered in this simulation period.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+      </footer>
+    </main>
   </div>
   `
 })
 export class DashboardComponent implements OnInit, OnDestroy {
-  activeTab: 'LIVE' | 'BACKTEST' = 'LIVE';
+  currentView: 'TERMINAL' | 'OPTION_CHAIN' | 'LEDGER' | 'BACKTEST' = 'TERMINAL';
   
   // Trading Data
   trades: any[] = [];
-  killSwitch = false;
   winRate = 0;
   totalPnL = 0;
   activeTradesCount = 0;
   maxDailyLoss = 5000;
   maxTradesPerDay = 10;
+  
+  // Safety Data
+  indiaVix = 15.0;
+  vixThreshold = 25.0;
+  isNewsPending = false;
   
   // Market Selection
   instruments: any = {};
@@ -314,7 +281,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   selectedInstrument: string = 'NIFTY';
   selectedExpiry: string = '';
   loadingExpiries: boolean = false;
-  expiryError: string | null = null;
 
   // Python Engine Tracking Data
   autoRunning = false;
@@ -327,9 +293,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     optionType: 'CE',
     strike: null as number | null,
     entryPrice: null as number | null,
-    qty: 50,
-    stopLoss: null as number | null,
-    target1: null as number | null
+    qty: 50
   };
   
   // Backtest Module State
@@ -344,7 +308,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private sub?: Subscription;
   private baseUrl = `${window.location.protocol}//${window.location.hostname}:8080/api`;
 
-  constructor(private http: HttpClient, private auth: AuthService, private router: Router) {}
+  constructor(private http: HttpClient, private auth: AuthService, public router: Router) {}
 
   onLogout() {
     this.auth.logout();
@@ -363,6 +327,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.maxDailyLoss = res.maxDailyLoss || 5000;
         this.maxTradesPerDay = res.maxTradesPerDay || 10;
+        this.vixThreshold = res.vixThreshold || 25.0;
       }
     });
   }
@@ -385,7 +350,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!inst) return;
 
     this.loadingExpiries = true;
-    this.expiryError = null;
     this.expiries = [];
     this.selectedExpiry = "";
 
@@ -400,10 +364,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.selectedExpiry = this.expiries[0];
         }
       },
-      error: (err) => {
+      error: () => {
         this.loadingExpiries = false;
-        this.expiryError = "Failed to load expiries";
-        console.error('Expiry fetch failed:', err);
       }
     });
   }
@@ -413,8 +375,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   refreshData() {
-    if (this.activeTab !== 'LIVE') return; 
-    
     this.http.get<any[]>(`${this.baseUrl}/trades`).subscribe({
       next: (res) => {
         this.trades = res.reverse();
@@ -430,19 +390,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
       },
       error: () => {}
     });
-  }
 
-  getRiskProgress(): number {
-    if (this.totalPnL >= 0) return 0;
-    const loss = Math.abs(this.totalPnL);
-    return Math.min(100, (loss / this.maxDailyLoss) * 100);
-  }
-
-  getRiskColor() {
-    const progress = this.getRiskProgress();
-    if (progress > 80) return 'danger';
-    if (progress > 50) return 'warning';
-    return 'safe';
+    this.http.get<any>(`${this.baseUrl}/safety/status`).subscribe({
+      next: (res) => {
+        this.indiaVix = res.indiaVix;
+        this.isNewsPending = res.isNewsPending;
+      },
+      error: () => {}
+    });
   }
 
   calculateMetrics() {
@@ -451,24 +406,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const wins = closed.filter(t => (t.pnl || 0) > 0).length;
       this.winRate = Math.round((wins / closed.length) * 100);
       this.totalPnL = Math.round(closed.reduce((acc, t) => acc + (t.pnl || 0), 0));
-    } else {
-      this.winRate = 0;
-      this.totalPnL = 0;
     }
-    this.activeTradesCount = this.trades.filter(t => t.status === 'OPEN').length;
-  }
-
-  toggleKillSwitch() {
-    this.killSwitch = !this.killSwitch;
-    this.http.post(`${this.baseUrl}/kill?active=${this.killSwitch}`, {}).subscribe();
   }
 
   toggleEngine() {
-    const nextState = !this.autoRunning;
     const inst = this.instruments[this.selectedInstrument];
-
     const payload = {
-      active: nextState,
+      active: !this.autoRunning,
       symbol: this.selectedInstrument,
       securityId: inst?.id?.toString() || "13",
       segment: inst?.segment || "IDX_I",
@@ -477,23 +421,36 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     this.http.post(`${this.baseUrl}/user/engine/toggle`, payload).subscribe({
       next: () => {
-        this.autoRunning = nextState;
-      },
-      error: (err) => {
-        alert("Failed to toggle engine. Check your Profile API keys and trading settings.");
+        this.autoRunning = !this.autoRunning;
       }
     });
   }
 
-  hasTrackedStrikes(): boolean {
-    return Object.keys(this.strategyState).length > 0;
-  }
-
   getTrackedStrikes() {
-    return Object.keys(this.strategyState).map(key => ({
+    return Object.keys(this.strategyState).filter(k => k !== 'option_chain').map(key => ({
       key,
       value: this.strategyState[key]
     }));
+  }
+
+  getGroupedOptionChain() {
+    const chain = this.strategyState['option_chain'] || [];
+    const grouped: any = {};
+    chain.forEach((opt: any) => {
+      if (!grouped[opt.strikePrice]) {
+        grouped[opt.strikePrice] = { strike: opt.strikePrice };
+      }
+      if (opt.optionType === 'CE') {
+        grouped[opt.strikePrice].ce = opt;
+      } else {
+        grouped[opt.strikePrice].pe = opt;
+      }
+    });
+    return Object.values(grouped).sort((a: any, b: any) => b.strike - a.strike);
+  }
+
+  isITM(strike: number): boolean {
+    return Math.abs(strike - 24500) < 100;
   }
 
   submitManualTrade() {
@@ -501,12 +458,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.isSubmitting = true;
     
     const payload = {
-        symbol: this.manualTrade.symbol,
+        symbol: this.selectedInstrument,
         strike: this.manualTrade.strike,
         optionType: this.manualTrade.optionType,
         entryPrice: this.manualTrade.entryPrice,
-        stopLoss: this.manualTrade.stopLoss,
-        target1: this.manualTrade.target1,
         qty: this.manualTrade.qty,
         strategyName: "Manual"
     };
@@ -516,13 +471,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.isSubmitting = false;
         this.manualTrade.strike = null;
         this.manualTrade.entryPrice = null;
-        this.manualTrade.stopLoss = null;
-        this.manualTrade.target1 = null;
-        this.refreshData(); 
+        alert("Order placed successfully.");
       },
       error: () => {
         this.isSubmitting = false;
-        alert("Failed to execute trade. Check constraints.");
+        alert("Failed to execute trade.");
       }
     });
   }
@@ -542,9 +495,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.backtestResults = res;
         }
       },
-      error: (err) => {
+      error: () => {
         this.isBacktesting = false;
-        this.backtestError = "Failed to reach backend proxy. Ensure your Profile is configured.";
+        this.backtestError = "Failed to reach backtest engine.";
       }
     });
   }
