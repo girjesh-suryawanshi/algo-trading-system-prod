@@ -7,6 +7,6 @@ RUN npm config set fetch-retry-maxtimeout 120000 && \
 COPY . .
 RUN npm run build
 
-FROM nginx:alpine
+FROM nginx:stable-alpine
 COPY --from=build /app/dist/algo-ui /usr/share/nginx/html
 EXPOSE 80

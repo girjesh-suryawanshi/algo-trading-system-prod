@@ -5,6 +5,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Entity
+@Table(name = "system_logs")
 @Data
 public class SystemLog {
     @Id

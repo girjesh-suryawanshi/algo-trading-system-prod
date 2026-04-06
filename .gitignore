@@ -1,0 +1,17 @@
+# Node
+node_modules/
+
+# Java / Spring Boot
+target/
+*.class
+
+# Logs
+*.log
+backend_logs.txt
+
+# Env files
+.env
+
+# Build folders
+dist/
+build/
