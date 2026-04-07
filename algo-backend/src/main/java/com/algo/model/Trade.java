@@ -29,6 +29,8 @@ public class Trade {
     private Double pnl;
     
     private String strategyName;
+    private Double trailingSL;
+    private Double tslPercentage;
     private Integer qty;
     
     @ManyToOne(fetch = FetchType.LAZY)

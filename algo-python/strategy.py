@@ -85,17 +85,22 @@ class StrategyManager:
                     "entry": weekly_low * 2,
                     "status": "WAITING",
                     "optionType": symbol_key,
-                    "stopLoss": max(0.05, weekly_low * 2 - (weekly_low)) # Initial SL
+                    "stopLoss": max(0.05, weekly_low * 2 - (weekly_low)), # Initial SL
+                    "oi": best_option.get('oi', 0),
+                    "expiry": self.expiry,
+                    "symbol": self.symbol
                 }
                 print(f"User {self.user_id} tracking {self.symbol} {symbol_key} at Strike {strike}, Entry {weekly_low*2}")
         
         current_live_ltp = get_ltp(self.access_token, self.client_id, security_id)
+        self.state[symbol_key]["ltp"] = current_live_ltp # Update Live LTP for UI
         
         # 2. Update Entry if lower price found
         if self.state[symbol_key]["status"] == "WAITING" and current_live_ltp < self.state[symbol_key]["low"]:
             self.state[symbol_key]["low"] = current_live_ltp
             self.state[symbol_key]["entry"] = current_live_ltp * 2
             self.state[symbol_key]["stopLoss"] = max(0.05, current_live_ltp * 2 - current_live_ltp)
+            self.state[symbol_key]["oi"] = best_option.get('oi', 0) # Refresh OI
             print(f"User {self.user_id} updated LOW for {symbol_key} to {current_live_ltp}")
 
         # 3. Handle Entry Execution

@@ -1,6 +1,8 @@
+F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\service\VolatilityService.java
 F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\controller\AuthController.java
 F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\service\RiskService.java
 F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\service\DhanExecutionService.java
+F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\controller\SafetyController.java
 F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\controller\TradeController.java
 F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\AlgoApplication.java
 F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\service\TradeMonitoringService.java
@@ -11,6 +13,7 @@ F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\s
 F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\controller\BacktestController.java
 F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\repository\TradeRepository.java
 F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\model\Trade.java
+F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\service\NewsService.java
 F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\service\LogService.java
 F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\model\SystemLog.java
 F:\reactworkspace\algo-trading-system-prod\algo-backend\src\main\java\com\algo\repository\UserRepository.java

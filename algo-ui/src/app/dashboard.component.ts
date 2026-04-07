@@ -96,37 +96,69 @@ import { Router } from '@angular/router';
             </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 340px; gap: 24px;">
-            <div class="glass-card">
+          <div class="glass-card mt-20">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
               <h3>Active Tracking</h3>
-              <div class="tracker-list mt-20">
-                <div *ngIf="getTrackedStrikes().length === 0" class="empty-state">Wait... Engine is searching for entries based on your strategy.</div>
-                <div *ngFor="let kv of getTrackedStrikes()" class="track-item" style="border: 1px solid rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; margin-bottom: 8px;">
-                   <div style="display: flex; justify-content: space-between; align-items: center;">
-                      <strong>{{ kv.key }}: {{ kv.value.strike }}</strong>
-                      <span [style.color]="kv.value.status === 'EXECUTED' ? '#10b981' : '#94a3b8'">{{ kv.value.status }}</span>
-                   </div>
-                   <div style="font-size: 0.8rem; margin-top: 4px; color: var(--text-muted);">
-                      Target: ₹{{ kv.value.entry }} | Current LTP: ₹{{ kv.value.ltp }}
-                   </div>
-                </div>
-              </div>
+              <div *ngIf="autoRunning" class="pulse-text" style="color: #10b981; font-size: 0.8rem;">● Engine Scanning Markets</div>
             </div>
+            
+            <div class="tracker-table-container">
+              <table class="modern-table">
+                <thead>
+                  <tr>
+                    <th>Instrument</th>
+                    <th>Strike</th>
+                    <th>Expiry</th>
+                    <th>OI</th>
+                    <th>LTP</th>
+                    <th>7D Low</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngIf="getTrackedStrikes().length === 0">
+                    <td colspan="8" class="empty-state">Engine is searching for entries based on your strategy...</td>
+                  </tr>
+                  <tr *ngFor="let kv of getTrackedStrikes()">
+                    <td>{{ kv.value.symbol || 'NIFTY' }}</td>
+                    <td><span class="badge" [class.ce]="kv.value.optionType === 'CE'" [class.pe]="kv.value.optionType === 'PE'">{{ kv.value.strike }} {{ kv.value.optionType }}</span></td>
+                    <td>{{ kv.value.expiry || '-' }}</td>
+                    <td>{{ kv.value.oi | number }}</td>
+                    <td class="neon-blue">₹{{ kv.value.ltp }}</td>
+                    <td class="text-muted">₹{{ kv.value.low }}</td>
+                    <td>
+                      <span class="status-pill" [attr.data-status]="kv.value.status">{{ kv.value.status }}</span>
+                    </td>
+                    <td>
+                      <button class="btn-action" (click)="openOrderModal(kv.value)">Execute Trade</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-            <div class="glass-card">
-               <h3>Manual Entry</h3>
-               <form (ngSubmit)="submitManualTrade()" class="manual-form mt-20" style="display: flex; flex-direction: column; gap: 12px;">
-                  <div style="display: flex; gap: 8px;">
-                    <input type="number" [(ngModel)]="manualTrade.strike" name="strike" placeholder="Strike Price" style="flex: 1;">
-                    <select [(ngModel)]="manualTrade.optionType" name="opttype" style="width: 80px;">
-                      <option value="CE">CE</option>
-                      <option value="PE">PE</option>
-                    </select>
-                  </div>
-                  <input type="number" [(ngModel)]="manualTrade.entryPrice" name="entry" placeholder="Entry Price">
-                  <input type="number" [(ngModel)]="manualTrade.qty" name="qty" placeholder="Quantity (Lots)">
-                  <button type="submit" class="btn-secondary">EXECUTE ORDER</button>
-               </form>
+          <div class="glass-card mt-20">
+            <h3>Live working orders</h3>
+            <div class="tracker-table-container mt-15">
+              <table class="modern-table">
+                <thead>
+                  <tr><th>Time</th><th>Details</th><th>Side</th><th>Entry</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                  <tr *ngIf="getWorkingOrders().length === 0">
+                    <td colspan="5" class="empty-state">No active working orders found.</td>
+                  </tr>
+                  <tr *ngFor="let t of getWorkingOrders()">
+                    <td>{{ t.createdAt | date:'HH:mm:ss' }}</td>
+                    <td>{{ t.symbol }} {{ t.strike }}</td>
+                    <td>{{ t.optionType }}</td>
+                    <td>₹{{ t.entryPrice }}</td>
+                    <td><span class="status-pill" data-status="OPEN">{{ t.status }}</span></td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -246,6 +278,55 @@ import { Router } from '@angular/router';
 
       </section>
 
+      <!-- ORDER MODAL -->
+      <div class="modal-overlay" *ngIf="showOrderModal">
+        <div class="glass-card modal-content animate-pop">
+           <div class="modal-header">
+              <h3>Manual Trade Execution</h3>
+              <button class="btn-close" (click)="closeOrderModal()">×</button>
+           </div>
+           
+           <div class="modal-body">
+              <div class="preview-banner">
+                 <strong>{{ manualTrade.symbol }} {{ manualTrade.strike }} {{ manualTrade.optionType }}</strong>
+                 <span>LTP: ₹{{ selectedTrackItem?.ltp }}</span>
+              </div>
+
+              <form (ngSubmit)="submitManualTrade()" class="manual-form mt-20">
+                 <div class="form-grid">
+                    <div class="form-group">
+                       <label>Entry Price</label>
+                       <input type="number" [(ngModel)]="manualTrade.entryPrice" name="entry" placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                       <label>Quantity (Lots)</label>
+                       <input type="number" [(ngModel)]="manualTrade.qty" name="qty" placeholder="50">
+                    </div>
+                    <div class="form-group">
+                       <label>Stop Loss (₹)</label>
+                       <input type="number" [(ngModel)]="manualTrade.stopLoss" name="sl" placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                       <label>Target (₹)</label>
+                       <input type="number" [(ngModel)]="manualTrade.target1" name="target" placeholder="0.00">
+                    </div>
+                    <div class="form-group full-width">
+                       <label>Trailing SL (%)</label>
+                       <input type="number" [(ngModel)]="manualTrade.tslPercentage" name="tsl" placeholder="e.g. 2">
+                    </div>
+                 </div>
+                 
+                 <div class="modal-actions mt-20">
+                    <button type="button" class="btn-secondary outline" (click)="closeOrderModal()">CANCEL</button>
+                    <button type="submit" class="btn-secondary" [disabled]="isSubmitting">
+                       {{ isSubmitting ? 'PLACING ORDER...' : 'CONFIRM & EXECUTE' }}
+                    </button>
+                 </div>
+              </form>
+           </div>
+        </div>
+      </div>
+
       <!-- FOOTER -->
       <footer class="footer">
         <div class="footer-left">
@@ -286,14 +367,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
   autoRunning = false;
   strategyState: any = {};
   
-  // Manual Form State
+  // Manual Form & Modal State
+  showOrderModal = false;
+  selectedTrackItem: any = null;
   isSubmitting = false;
   manualTrade = {
     symbol: 'NIFTY',
     optionType: 'CE',
     strike: null as number | null,
     entryPrice: null as number | null,
-    qty: 50
+    qty: 50,
+    stopLoss: null as number | null,
+    target1: null as number | null,
+    tslPercentage: 2.0
   };
   
   // Backtest Module State
@@ -433,6 +519,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }));
   }
 
+  getWorkingOrders() {
+    return this.trades.filter(t => t.status === 'OPEN' || t.status === 'WAITING');
+  }
+
   getGroupedOptionChain() {
     const chain = this.strategyState['option_chain'] || [];
     const grouped: any = {};
@@ -450,7 +540,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   isITM(strike: number): boolean {
-    return Math.abs(strike - 24500) < 100;
+    const spot = this.selectedInstrument === 'NIFTY' ? 24500 : 52000; // Mock spot
+    return Math.abs(strike - spot) < 100;
+  }
+
+  openOrderModal(item: any) {
+    this.selectedTrackItem = item;
+    this.manualTrade.strike = item.strike;
+    this.manualTrade.optionType = item.optionType;
+    this.manualTrade.entryPrice = item.entry || item.ltp;
+    this.manualTrade.stopLoss = item.stopLoss || Math.round(this.manualTrade.entryPrice! * 0.9);
+    this.manualTrade.target1 = Math.round(this.manualTrade.entryPrice! * 1.1);
+    this.showOrderModal = true;
+  }
+
+  closeOrderModal() {
+    this.showOrderModal = false;
+    this.selectedTrackItem = null;
   }
 
   submitManualTrade() {
@@ -463,15 +569,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
         optionType: this.manualTrade.optionType,
         entryPrice: this.manualTrade.entryPrice,
         qty: this.manualTrade.qty,
+        stopLoss: this.manualTrade.stopLoss,
+        target1: this.manualTrade.target1,
+        tslPercentage: this.manualTrade.tslPercentage,
         strategyName: "Manual"
     };
 
     this.http.post(`${this.baseUrl}/trade`, payload).subscribe({
       next: () => {
         this.isSubmitting = false;
-        this.manualTrade.strike = null;
-        this.manualTrade.entryPrice = null;
-        alert("Order placed successfully.");
+        this.closeOrderModal();
+        this.refreshData();
       },
       error: () => {
         this.isSubmitting = false;
