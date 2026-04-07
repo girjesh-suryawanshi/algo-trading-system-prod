@@ -9,4 +9,5 @@ import java.util.List;
 public interface TradeRepository extends JpaRepository<Trade, Long> {
     List<Trade> findByUser(User user);
     List<Trade> findByUserAndCreatedAtAfter(User user, LocalDateTime timestamp);
+    List<Trade> findByUserAndStatus(User user, String status);
 }

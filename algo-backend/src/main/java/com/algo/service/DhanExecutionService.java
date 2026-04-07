@@ -14,7 +14,8 @@ public class DhanExecutionService {
     public boolean placeOrder(Trade trade) {
         User user = trade.getUser();
         if (user.getPaperTradingMode()) {
-            System.out.println("PAPER MODE: Skipping API key validation for User: " + user.getEmail());
+            String type = "WAITING".equals(trade.getStatus()) ? "LIMIT" : "MARKET";
+            System.out.println("PAPER MODE [" + type + "]: Skipping API for " + user.getEmail() + " | Price: " + trade.getEntryPrice());
             return true;
         }
 
@@ -22,12 +23,24 @@ public class DhanExecutionService {
         String clientId = encryptionService.decrypt(user.getDhanClientId());
 
         if (accessToken == null || clientId == null) {
-            System.err.println("User " + user.getEmail() + " has not configured Dhan API keys.");
             return false;
         }
 
-        // Real Dhan API call would go here using decrypted accessToken/clientId
-        System.out.println("LIVE MODE: Placing order for User: " + user.getEmail() + " | Strike: " + trade.getStrike() + " Type: " + trade.getOptionType());
+        // Real Dhan API call would go here
+        String type = "WAITING".equals(trade.getStatus()) ? "LIMIT" : "MARKET";
+        System.out.println("LIVE MODE [" + type + "]: Placing order for " + user.getEmail());
+        return true;
+    }
+
+    public boolean cancelOrder(Trade trade) {
+        User user = trade.getUser();
+        if (user.getPaperTradingMode()) {
+            System.out.println("PAPER MODE: Cancelling Pending Order for " + user.getEmail());
+            return true;
+        }
+        
+        // Real Dhan API Cancel call
+        System.out.println("LIVE MODE: Dhan API Cancel for " + user.getEmail());
         return true;
     }
     

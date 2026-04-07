@@ -25,181 +25,153 @@ class StrategyManager:
         self.SPRING_URL = os.getenv("SPRING_URL", "http://backend:8080/api/trade")
 
     def select_best_strikes(self, options):
-        best_options = {}
-        for opt_type in ['CE', 'PE']:
-            # Extra safety: Ensure o is a dict before calling .get()
-            eligible = [o for o in options if isinstance(o, dict) and o.get('ltp', 0) <= self.target_price_limit and o.get('optionType') == opt_type]
-            print(f">>> [DEBUG] User {self.user_id} {opt_type}: Found {len(eligible)} eligible strikes (Price <= {self.target_price_limit})")
-            if eligible:
-                best_options[opt_type] = sorted(eligible, key=lambda x: x.get('ltp', 0), reverse=True)[0]
-                print(f">>> [DEBUG] User {self.user_id} {opt_type}: Selected Strike {best_options[opt_type].get('strikePrice')} at LTP {best_options[opt_type].get('ltp')}")
-        return best_options
-
-    def manage_trailing_sl(self, symbol_key, current_ltp):
-        """Logic to move SL up as price moves in profit."""
-        trade = self.active_trades[symbol_key]
-        entry = trade['entry']
-        current_sl = trade['sl']
+        """Identify all strike prices where LTP <= 12."""
+        eligible = [o for o in options if isinstance(o, dict) and o.get('ltp', 0) <= self.target_price_limit and o.get('ltp', 0) > 0]
+        print(f">>> [DEBUG] User {self.user_id}: Found {len(eligible)} strikes (Price <= {self.target_price_limit})")
         
-        # If price has moved UP by tsl_step from entry or previous trail point
-        # Profit milestones: Entry + Step, Entry + 2*Step, etc.
-        # We calculate how many steps we have moved in profit
-        profit = current_ltp - entry
-        if profit >= self.tsl_step:
-            # New calculated SL = Entry + (profit - step)
-            # Actually, let's keep it simple: Move SL up by 'tsl_step' for every 'tsl_step' gain
-            steps_gained = int(profit / self.tsl_step)
-            new_sl = entry + (steps_gained - 1) * self.tsl_step 
-            # In LowX2, entry is usually low*2. 
-            # Safety: don't let SL go below original SL
-            if new_sl > current_sl:
-                print(f">>> [TSL] User {self.user_id} {symbol_key} trailing SL from {current_sl} to {new_sl} (LTP: {current_ltp})")
-                self.active_trades[symbol_key]['sl'] = new_sl
-                self.state[symbol_key]['stopLoss'] = new_sl # Update state for UI
+        # Sort by LTP descending to pick the most relevant one (closest to 12)
+        # But per Rule #7, we only track ONE pending order at a time across CE/PE.
+        if not eligible:
+            return None
+            
+        best = sorted(eligible, key=lambda x: x.get('ltp', 0), reverse=True)[0]
+        return best
 
-    def process_option_type(self, symbol_key, best_option):
-        security_id = best_option['securityId']
-        strike = best_option['strikePrice']
-        current_ltp = best_option['ltp']
+    def process_strategy_logic(self):
+        """Main loop for strategy execution according to User rules."""
+        data = get_option_chain(self.access_token, self.client_id, self.security_id, self.segment, self.expiry)
+        options = data.get('data', []) if isinstance(data, dict) else []
+        self.state['option_chain'] = options
 
-        # 1. Search for Entries if not already in a trade
-        if symbol_key not in self.state or self.state[symbol_key]['strike'] != strike:
-            if symbol_key in self.state and self.state[symbol_key]['status'] == 'EXECUTED':
-                # Already in a trade for this type, skipping search
-                pass
-            else:
-                history = get_historical_data(self.access_token, self.client_id, security_id, self.segment, days=7)
+        # 1. Handle Active (Executed) Trades Independently (Rule #8)
+        for symbol_key in list(self.active_trades.keys()):
+            trade = self.active_trades[symbol_key]
+            # Fetch current LTP for active trades
+            current_live_ltp = get_ltp(self.access_token, self.client_id, trade['securityId'])
+            if current_live_ltp <= 0: continue
+            
+            self.state[symbol_key]["ltp"] = current_live_ltp
+            
+            # Check Target/SL
+            if current_live_ltp >= trade['target']:
+                print(f">>> [EXIT] User {self.user_id} {symbol_key} Target Hit at {current_live_ltp}")
+                self.state[symbol_key]['status'] = 'EXITED_TARGET'
+                del self.active_trades[symbol_key]
+            elif current_live_ltp <= trade['sl']:
+                print(f">>> [EXIT] User {self.user_id} {symbol_key} SL Hit at {current_live_ltp}")
+                self.state[symbol_key]['status'] = 'EXITED_SL'
+                del self.active_trades[symbol_key]
+
+        # 2. Continuous Scanning for New Opportunities (Rule #7)
+        best_qualified = self.select_best_strikes(options)
+        
+        if best_qualified:
+            strike = best_qualified['strikePrice']
+            security_id = best_qualified['securityId']
+            current_ltp = best_qualified['ltp']
+            opt_type = best_qualified['optionType']
+            
+            # If we already have a pending strike, check if it's the same or if we should replace it
+            current_pending = self.state.get("PENDING_SIGNAL")
+            
+            if not current_pending or current_pending['strike'] != strike or current_pending['optionType'] != opt_type:
+                # Rule #7: Cancel previous pending signal if not executed
+                if current_pending:
+                    self.cancel_pending_signal(current_pending)
                 
-                # Robustness: Check if history is a dictionary
-                if not isinstance(history, dict):
-                    print(f"Error: Historical data is not a dict for {security_id}: {type(history)}")
-                    history = {"data": []}
-                    
+                # Fetch Contract-lifetime LOW (30 days)
+                history = get_historical_data(self.access_token, self.client_id, security_id, self.segment, days=30)
                 lows = [c['low'] for c in history.get('data', []) if isinstance(c, dict) and 'low' in c]
-                weekly_low = min(lows) if lows else current_ltp
+                contract_low = min(lows) if lows else current_ltp
                 
-                self.state[symbol_key] = {
+                entry_price = contract_low * 2
+                sl_price = contract_low - 1
+                risk = entry_price - sl_price
+                
+                new_signal = {
                     "strike": strike,
                     "securityId": security_id,
-                    "low": weekly_low,
-                    "entry": weekly_low * 2,
+                    "low": contract_low,
+                    "entry": entry_price,
+                    "stopLoss": sl_price,
+                    "target": round(entry_price + (2 * risk), 2), # Default to 1:2 per logic
+                    "optionType": opt_type,
                     "status": "WAITING",
-                    "optionType": symbol_key,
-                    "stopLoss": max(0.05, weekly_low * 2 - (weekly_low)), # Initial SL
-                    "oi": best_option.get('oi', 0),
+                    "symbol": self.symbol,
                     "expiry": self.expiry,
-                    "symbol": self.symbol
+                    "ltp": current_ltp
                 }
-                print(f"User {self.user_id} tracking {self.symbol} {symbol_key} at Strike {strike}, Entry {weekly_low*2}")
-        
-        current_live_ltp = get_ltp(self.access_token, self.client_id, security_id)
-        if current_live_ltp > 0:
-            self.state[symbol_key]["ltp"] = current_live_ltp # Update Live LTP for UI
-        elif "ltp" not in self.state[symbol_key]:
-             self.state[symbol_key]["ltp"] = best_option.get('ltp', 0)
-        
-        # 2. Update Entry if lower price found
-        if self.state[symbol_key]["status"] == "WAITING" and current_live_ltp < self.state[symbol_key]["low"]:
-            self.state[symbol_key]["low"] = current_live_ltp
-            self.state[symbol_key]["entry"] = current_live_ltp * 2
-            self.state[symbol_key]["stopLoss"] = max(0.05, current_live_ltp * 2 - current_live_ltp)
-            self.state[symbol_key]["oi"] = best_option.get('oi', 0) # Refresh OI
-            print(f"User {self.user_id} updated LOW for {symbol_key} to {current_live_ltp}")
+                
+                # Send Signal to Backend (Rule #3: Create Pending Order)
+                self.send_signal(new_signal)
+                self.state["PENDING_SIGNAL"] = new_signal
+                self.state[opt_type] = new_signal # For UI display
+                
+            else:
+                # Same strike, just update LTP
+                self.state["PENDING_SIGNAL"]["ltp"] = current_ltp
+                self.state[opt_type]["ltp"] = current_ltp
+                
+                # Check for Execution (Rule #6: LTP hits Entry)
+                # Note: In real setup, the broker handles the pending order. 
+                # We track it here to move it to 'active_trades' once we detect execution.
+                if current_ltp >= self.state["PENDING_SIGNAL"]["entry"]:
+                    pending = self.state["PENDING_SIGNAL"]
+                    self.active_trades[opt_type] = {
+                        "entry": pending["entry"],
+                        "sl": pending["stopLoss"],
+                        "target": pending["target"],
+                        "securityId": pending["securityId"]
+                    }
+                    self.state[opt_type]["status"] = "EXECUTED"
+                    del self.state["PENDING_SIGNAL"]
+                    alert_entry(self.symbol, pending["strike"], pending["entry"])
 
-        # 3. Handle Entry Execution
-        entry_price = self.state[symbol_key]["entry"]
-        if current_live_ltp >= entry_price and self.state[symbol_key]["status"] == "WAITING":
-            sl = self.state[symbol_key]["stopLoss"]
-            self.send_signal(best_option, entry_price, sl)
-            self.state[symbol_key]["status"] = "EXECUTED"
-            self.active_trades[symbol_key] = {
-                "entry": entry_price,
-                "sl": sl,
-                "securityId": security_id
-            }
-            alert_entry(self.symbol, strike, entry_price)
-
-        # 4. Manage Trailing Stop Loss for Active Trades
-        if symbol_key in self.active_trades:
-            self.manage_trailing_sl(symbol_key, current_live_ltp)
-            # Check for SL Exit
-            if current_live_ltp <= self.active_trades[symbol_key]['sl']:
-                print(f">>> [EXIT] User {self.user_id} {symbol_key} SL Hit at {current_live_ltp}")
-                # Notify backend (optional, but good for record)
-                del self.active_trades[symbol_key]
-                self.state[symbol_key]['status'] = 'EXITED_SL'
+        return self.state
 
     def run_strategy(self):
-        # Fetch Real-time India VIX
+        # Update India VIX
         from dhan_api import get_india_vix
         real_vix = get_india_vix(self.access_token, self.client_id)
         if real_vix is not None:
             self.state['indiaVix'] = round(real_vix, 2)
-        else:
-            # Keep previous VIX or set a default if first run
-            if 'indiaVix' not in self.state:
-                self.state['indiaVix'] = 15.0
-
-        data = get_option_chain(self.access_token, self.client_id, self.security_id, self.segment, self.expiry)
-        
-        # Robustness: Check if data is a dictionary
-        if not isinstance(data, dict):
-            print(f"Error: Option chain data is not a dict: {type(data)}")
-            data = {"data": []}
             
-        options = data.get('data', []) if isinstance(data, dict) else []
-        if not isinstance(options, list):
-            print(f"Error: Options data is not a list for user {self.user_id}: {type(options)} - Content: {options}")
-            options = []
-            
-        self.state['option_chain'] = options # Store for UI
-        best_options = self.select_best_strikes(options)
-        
-        if not best_options and not self.active_trades:
-            return {"msg": f"No active/eligible logic for user {self.user_id}"}
+        return self.process_strategy_logic()
 
-        for opt_type, best_option in best_options.items():
-            self.process_option_type(opt_type, best_option)
-
-        # Ensure LTP update for all tracked symbols in state, even if not in best_options
-        for opt_type in ['CE', 'PE']:
-            if opt_type in self.state and opt_type not in best_options:
-                # If we are already tracking this, update its live LTP
-                sec_id = self.state[opt_type].get('securityId')
-                if sec_id:
-                    from dhan_api import get_ltp
-                    current_ltp = get_ltp(self.access_token, self.client_id, sec_id)
-                    self.state[opt_type]['ltp'] = current_ltp
-                    # Also update low if it's lower
-                    if self.state[opt_type]['status'] == "WAITING" and current_ltp < self.state[opt_type]['low']:
-                        self.state[opt_type]['low'] = current_ltp
-                        self.state[opt_type]['entry'] = current_ltp * 2
-        for symbol_key in list(self.active_trades.keys()):
-            if symbol_key not in best_options:
-                current_live_ltp = get_ltp(self.access_token, self.client_id, self.active_trades[symbol_key]['securityId'])
-                self.manage_trailing_sl(symbol_key, current_live_ltp)
-
-        return self.state
-
-    def send_signal(self, option, entry, sl):
-        risk = entry - sl
+    def send_signal(self, signal):
+        """Sends signal to backend to place PENDING order."""
         payload = {
-            "symbol": self.symbol,
-            "strike": option['strikePrice'],
-            "optionType": option['optionType'],
-            "entryPrice": entry,
-            "stopLoss": sl,
-            "target1": round(entry + risk, 2),
-            "target2": round(entry + (2 * risk), 2),
-            "target3": round(entry + (3 * risk), 2),
+            "symbol": signal['symbol'],
+            "strike": signal['strike'],
+            "optionType": signal['optionType'],
+            "entryPrice": signal['entry'],
+            "stopLoss": signal['stopLoss'],
+            "target1": signal['target'],
             "qty": 50,
             "strategyName": "LowX2",
-            "userId": self.user_id
+            "userId": self.user_id,
+            "isPending": True # Hint to backend to use LIMIT order
         }
         try:
             headers = {"X-Engine-Token": "lumina-secret-2026"}
             engine_url = self.SPRING_URL.replace("/trade", "/engine/signal")
             requests.post(engine_url, json=payload, headers=headers, timeout=3)
-            print(f"Signal sent for User {self.user_id}: {self.symbol} {option['optionType']} {option['strikePrice']}")
+            print(f"Signal sent for {signal['optionType']} {signal['strike']} (Pending at {signal['entry']})")
         except Exception as e:
-            print(f"Failed to send signal for {self.user_id}: {e}")
+            print(f"Failed to send signal: {e}")
+
+    def cancel_pending_signal(self, signal):
+        """Notifies backend to cancel existing pending order."""
+        payload = {
+            "symbol": signal['symbol'],
+            "strike": signal['strike'],
+            "optionType": signal['optionType'],
+            "userId": self.user_id
+        }
+        try:
+            headers = {"X-Engine-Token": "lumina-secret-2026"}
+            cancel_url = self.SPRING_URL.replace("/trade", "/engine/cancel")
+            requests.post(cancel_url, json=payload, headers=headers, timeout=3)
+            print(f"Cancellation sent for {signal['optionType']} {signal['strike']}")
+        except Exception as e:
+            print(f"Failed to cancel signal: {e}")

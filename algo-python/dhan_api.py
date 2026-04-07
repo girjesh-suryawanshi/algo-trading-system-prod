@@ -82,7 +82,7 @@ def get_option_chain(access_token, client_id, security_id, segment, expiry):
         print(f"Error fetching option chain: {e}")
         return {"data": []}
 
-def get_historical_data(access_token, client_id, security_id, segment, days=7):
+def get_historical_data(access_token, client_id, security_id, segment, days=30):
     to_date = datetime.now().strftime("%Y-%m-%d")
     from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     
