@@ -65,6 +65,15 @@ import { Router } from '@angular/router';
             </select>
           </div>
 
+          <div class="mode-toggle">
+            <span class="toggle-label paper" [class.active]="paperTradingMode">Paper</span>
+            <label class="switch">
+              <input type="checkbox" [checked]="!paperTradingMode" (change)="toggleTradingMode()">
+              <span class="slider"></span>
+            </label>
+            <span class="toggle-label live" [class.active]="!paperTradingMode">Live</span>
+          </div>
+
           <div class="engine-status" [class.live]="autoRunning" [class.idle]="!autoRunning" (click)="toggleEngine()">
             <span class="status-dot" [class.pulse]="autoRunning"></span>
             ENGINE: {{ autoRunning ? 'LIVE' : 'IDLE' }}
@@ -78,6 +87,10 @@ import { Router } from '@angular/router';
         <!-- TERMINAL VIEW (Default) -->
         <div *ngIf="currentView === 'TERMINAL'">
           <div class="kpi-grid">
+            <div class="glass-card kpi-card neon-border">
+              <small class="text-muted">Virtual Balance</small>
+              <div class="kpi-value neon-purple">₹{{ virtualBalance | number:'1.0-0' }}</div>
+            </div>
             <div class="glass-card kpi-card">
               <small class="text-muted">Daily PnL</small>
               <div class="kpi-value" [class.neon-green]="totalPnL > 0" [class.neon-red]="totalPnL < 0">₹{{ totalPnL }}</div>
@@ -350,6 +363,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   activeTradesCount = 0;
   maxDailyLoss = 5000;
   maxTradesPerDay = 10;
+  virtualBalance = 1000000.0;
   
   // Safety Data
   indiaVix = 15.0;
@@ -365,6 +379,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // Python Engine Tracking Data
   autoRunning = false;
+  paperTradingMode = true;
   strategyState: any = {};
   
   // Manual Form & Modal State
@@ -414,6 +429,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.maxDailyLoss = res.maxDailyLoss || 5000;
         this.maxTradesPerDay = res.maxTradesPerDay || 10;
         this.vixThreshold = res.vixThreshold || 25.0;
+        this.virtualBalance = res.virtualBalance || 1000000.0;
+        this.paperTradingMode = res.paperTradingMode !== undefined ? res.paperTradingMode : true;
       }
     });
   }
@@ -473,13 +490,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.autoRunning = res.auto_running;
         this.strategyState = res.strategy_state || {};
+        // Prioritize Real-time VIX from Python Engine
+        if (this.strategyState.indiaVix) {
+          this.indiaVix = this.strategyState.indiaVix;
+        }
       },
       error: () => {}
     });
 
     this.http.get<any>(`${this.baseUrl}/safety/status`).subscribe({
       next: (res) => {
-        this.indiaVix = res.indiaVix;
+        // Only use backend VIX if engine VIX is not available
+        if (!this.strategyState.indiaVix) {
+          this.indiaVix = res.indiaVix;
+        }
         this.isNewsPending = res.isNewsPending;
       },
       error: () => {}
@@ -512,11 +536,39 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  toggleTradingMode() {
+    const newMode = !this.paperTradingMode;
+    this.http.put(`${this.baseUrl}/user/profile`, { paperTradingMode: newMode }).subscribe({
+      next: () => {
+        this.paperTradingMode = newMode;
+        // Optional: Show toast
+      },
+      error: () => {
+        alert("Failed to switch trading mode.");
+      }
+    });
+  }
+
   getTrackedStrikes() {
-    return Object.keys(this.strategyState).filter(k => k !== 'option_chain').map(key => ({
-      key,
-      value: this.strategyState[key]
-    }));
+    const excludeKeys = ['option_chain', 'indiaVix'];
+    const chain = this.strategyState['option_chain'] || [];
+    
+    return Object.keys(this.strategyState)
+      .filter(k => !excludeKeys.includes(k))
+      .map(key => {
+        const item = { ...this.strategyState[key] };
+        // Fallback: If LTP is 0, try to fetch from Option Chain state
+        if (item.ltp === 0) {
+          const match = chain.find((c: any) => 
+            c.strikePrice === item.strike && 
+            c.optionType === item.optionType
+          );
+          if (match && match.ltp > 0) {
+            item.ltp = match.ltp;
+          }
+        }
+        return { key, value: item };
+      });
   }
 
   getWorkingOrders() {
@@ -581,9 +633,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.closeOrderModal();
         this.refreshData();
       },
-      error: () => {
+      error: (err) => {
         this.isSubmitting = false;
-        alert("Failed to execute trade.");
+        const msg = err.error || "Failed to execute trade.";
+        alert(msg);
       }
     });
   }

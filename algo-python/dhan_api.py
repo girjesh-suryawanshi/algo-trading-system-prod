@@ -110,10 +110,35 @@ def get_ltp(access_token, client_id, security_id):
     try:
         res = requests.get(url, headers=get_headers(access_token, client_id), timeout=5)
         if res.status_code == 200:
-            data = _safe_json(res, default_val={"data": {"ltp": 0}})
-            if isinstance(data, dict):
-                return data.get('data', {}).get('ltp', 0)
-            return 0
+            data_resp = _safe_json(res, default_val={"data": {}})
+            data = data_resp.get('data', {})
+            # Dhan V2 Market Quote OHLC usually returns 'last_price'
+            val = data.get('last_price') or data.get('ltp') or data.get('lastPrice') or data.get('close') or 0
+            if val == 0:
+                print(f"Warning: LTP for {security_id} returned 0. Raw Data: {data}")
+            return val
+        else:
+            print(f"Error: LTP API for {security_id} failed with {res.status_code}")
         return 0
-    except Exception:
+    except Exception as e:
+        print(f"Exception in get_ltp: {e}")
         return 0
+
+def get_india_vix(access_token, client_id):
+    # India VIX Security ID is 21, Segment Nse_Indices (IDX_I)
+    url = f"{BASE_URL}/marketquote/ohlc/21"
+    try:
+        res = requests.get(url, headers=get_headers(access_token, client_id), timeout=5)
+        if res.status_code == 200:
+            data_resp = _safe_json(res, default_val={"data": {}})
+            data = data_resp.get('data', {})
+            val = data.get('last_price') or data.get('ltp') or data.get('lastPrice') or data.get('close')
+            if val is not None:
+                return float(val)
+            print(f"Warning: VIX fetch returned None. Raw Data: {data}")
+        else:
+            print(f"Error: VIX API failed with {res.status_code}: {res.text}")
+        return None # Return None to indicate failure
+    except Exception as e:
+        print(f"Exception in get_india_vix: {e}")
+        return None

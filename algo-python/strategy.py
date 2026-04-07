@@ -93,7 +93,10 @@ class StrategyManager:
                 print(f"User {self.user_id} tracking {self.symbol} {symbol_key} at Strike {strike}, Entry {weekly_low*2}")
         
         current_live_ltp = get_ltp(self.access_token, self.client_id, security_id)
-        self.state[symbol_key]["ltp"] = current_live_ltp # Update Live LTP for UI
+        if current_live_ltp > 0:
+            self.state[symbol_key]["ltp"] = current_live_ltp # Update Live LTP for UI
+        elif "ltp" not in self.state[symbol_key]:
+             self.state[symbol_key]["ltp"] = best_option.get('ltp', 0)
         
         # 2. Update Entry if lower price found
         if self.state[symbol_key]["status"] == "WAITING" and current_live_ltp < self.state[symbol_key]["low"]:
@@ -127,6 +130,16 @@ class StrategyManager:
                 self.state[symbol_key]['status'] = 'EXITED_SL'
 
     def run_strategy(self):
+        # Fetch Real-time India VIX
+        from dhan_api import get_india_vix
+        real_vix = get_india_vix(self.access_token, self.client_id)
+        if real_vix is not None:
+            self.state['indiaVix'] = round(real_vix, 2)
+        else:
+            # Keep previous VIX or set a default if first run
+            if 'indiaVix' not in self.state:
+                self.state['indiaVix'] = 15.0
+
         data = get_option_chain(self.access_token, self.client_id, self.security_id, self.segment, self.expiry)
         
         # Robustness: Check if data is a dictionary
@@ -148,7 +161,19 @@ class StrategyManager:
         for opt_type, best_option in best_options.items():
             self.process_option_type(opt_type, best_option)
 
-        # Also process active trades that might not be in 'best_options' anymore
+        # Ensure LTP update for all tracked symbols in state, even if not in best_options
+        for opt_type in ['CE', 'PE']:
+            if opt_type in self.state and opt_type not in best_options:
+                # If we are already tracking this, update its live LTP
+                sec_id = self.state[opt_type].get('securityId')
+                if sec_id:
+                    from dhan_api import get_ltp
+                    current_ltp = get_ltp(self.access_token, self.client_id, sec_id)
+                    self.state[opt_type]['ltp'] = current_ltp
+                    # Also update low if it's lower
+                    if self.state[opt_type]['status'] == "WAITING" and current_ltp < self.state[opt_type]['low']:
+                        self.state[opt_type]['low'] = current_ltp
+                        self.state[opt_type]['entry'] = current_ltp * 2
         for symbol_key in list(self.active_trades.keys()):
             if symbol_key not in best_options:
                 current_live_ltp = get_ltp(self.access_token, self.client_id, self.active_trades[symbol_key]['securityId'])
@@ -172,7 +197,9 @@ class StrategyManager:
             "userId": self.user_id
         }
         try:
-            requests.post(self.SPRING_URL, json=payload, timeout=3)
+            headers = {"X-Engine-Token": "lumina-secret-2026"}
+            engine_url = self.SPRING_URL.replace("/trade", "/engine/signal")
+            requests.post(engine_url, json=payload, headers=headers, timeout=3)
             print(f"Signal sent for User {self.user_id}: {self.symbol} {option['optionType']} {option['strikePrice']}")
         except Exception as e:
             print(f"Failed to send signal for {self.user_id}: {e}")

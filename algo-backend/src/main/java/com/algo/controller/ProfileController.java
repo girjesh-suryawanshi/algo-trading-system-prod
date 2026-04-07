@@ -50,6 +50,7 @@ public class ProfileController {
                 .vixThreshold(user.getVixThreshold())
                 .newsKillSwitchActive(user.getNewsKillSwitchActive())
                 .newsBufferMinutes(user.getNewsBufferMinutes())
+                .paperTradingMode(user.getPaperTradingMode())
                 .build());
     }
 
@@ -88,6 +89,10 @@ public class ProfileController {
 
         if (dto.getNewsBufferMinutes() != null) {
             user.setNewsBufferMinutes(dto.getNewsBufferMinutes());
+        }
+
+        if (dto.getPaperTradingMode() != null) {
+            user.setPaperTradingMode(dto.getPaperTradingMode());
         }
         
         try {

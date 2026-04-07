@@ -7,6 +7,7 @@ import com.algo.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -43,24 +44,25 @@ public class RiskService {
             return false;
         }
 
-        // 2. India VIX Filter
-        if (vixService.getCurrentVix() > vixLimit) {
+        // 2. India VIX Filter (Bypassed in Paper Mode)
+        if (user != null && !user.getPaperTradingMode() && vixService.getCurrentVix() > vixLimit) {
             return false;
         }
 
-        // 3. Economic News Kill Switch
-        if (newsKillSwitchEnabled && newsService.isNewsPending(newsBuffer)) {
+        // 3. Economic News Kill Switch (Bypassed in Paper Mode)
+        if (user != null && !user.getPaperTradingMode() && newsKillSwitchEnabled && newsService.isNewsPending(newsBuffer)) {
             return false;
         }
 
         // 4. Max Trades Check
-        long count = tradeRepository.count(); 
-        if (count >= maxTrades) {
+        LocalDateTime startOfDay = LocalDateTime.now().with(LocalTime.MIN);
+        List<Trade> todayTrades = tradeRepository.findByUserAndCreatedAtAfter(user, startOfDay);
+        
+        if (todayTrades.size() >= maxTrades) {
             return false;
         }
 
         // 5. Daily Loss Check
-        List<Trade> todayTrades = tradeRepository.findAll();
         double currentPnl = todayTrades.stream()
                 .filter(t -> t.getPnl() != null)
                 .mapToDouble(Trade::getPnl)

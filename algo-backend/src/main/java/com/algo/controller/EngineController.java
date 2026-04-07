@@ -1,71 +1,68 @@
 package com.algo.controller;
 
+import com.algo.model.Trade;
 import com.algo.model.User;
+import com.algo.repository.TradeRepository;
 import com.algo.repository.UserRepository;
-import com.algo.service.EncryptionService;
+import com.algo.service.DhanExecutionService;
+import com.algo.service.RiskService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestTemplate;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/api/engine")
 @RequiredArgsConstructor
 public class EngineController {
 
+    private final TradeRepository repo;
     private final UserRepository userRepo;
-    private final EncryptionService encryptionService;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RiskService riskService;
+    private final DhanExecutionService executionService;
 
-    @Value("${app.maxConcurrentEngines:10}")
-    private int maxConcurrentEngines;
+    private static final String ENGINE_TOKEN = "lumina-secret-2026";
 
-    private final String PYTHON_ENGINE_URL = "http://python:8000/engine";
-
-    private User getCurrentUser() {
-        String email = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        return userRepo.findByEmail(email).orElseThrow(() -> new RuntimeException("User not found"));
-    }
-
-    @PostMapping("/toggle")
-    public ResponseEntity<Object> toggleEngine(@RequestParam boolean active) {
-        User user = getCurrentUser();
+    @PostMapping("/signal")
+    public ResponseEntity<String> receiveSignal(
+            @RequestHeader("X-Engine-Token") String token,
+            @RequestBody Trade trade) {
         
-        String accessToken = encryptionService.decrypt(user.getDhanAccessToken());
-        String clientId = encryptionService.decrypt(user.getDhanClientId());
-
-        if (accessToken == null || clientId == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Dhan API keys not configured in Profile."));
+        if (!ENGINE_TOKEN.equals(token)) {
+            return ResponseEntity.status(401).body("Invalid Engine Token");
         }
 
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("userId", user.getId());
-        payload.put("accessToken", accessToken);
-        payload.put("clientId", clientId);
-        payload.put("targetPriceLimit", user.getTargetPriceLimit());
-
-        String endpoint = active ? "/start" : "/stop";
-        try {
-            ResponseEntity<Object> response = restTemplate.postForEntity(PYTHON_ENGINE_URL + endpoint, payload, Object.class);
-            return ResponseEntity.ok(response.getBody());
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", "Engine communication failed: " + e.getMessage()));
+        Long userId = trade.getUserId();
+        if (userId == null) {
+            return ResponseEntity.badRequest().body("User ID is missing");
         }
-    }
 
-    @GetMapping("/status")
-    public ResponseEntity<Object> getStatus() {
-        User user = getCurrentUser();
-        try {
-            ResponseEntity<Object> response = restTemplate.getForEntity(PYTHON_ENGINE_URL + "/status/" + user.getId(), Object.class);
-            return ResponseEntity.ok(response.getBody());
-        } catch (Exception e) {
-            return ResponseEntity.ok(Map.of("auto_running", false, "strategy_state", new HashMap<>()));
+        User user = userRepo.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        trade.setUser(user);
+
+        if (!riskService.isSafeToTrade(trade)) {
+            trade.setStatus("REJECTED");
+            trade.setCreatedAt(LocalDateTime.now());
+            repo.save(trade);
+            return ResponseEntity.badRequest().body("Risk limits hit");
+        }
+
+        if (executionService.placeOrder(trade)) {
+            trade.setStatus("OPEN");
+            trade.setCreatedAt(LocalDateTime.now());
+            
+            // Deduct from Virtual Balance
+            double cost = trade.getEntryPrice() * trade.getQty();
+            user.setVirtualBalance(user.getVirtualBalance() - cost);
+            userRepo.save(user);
+            
+            repo.save(trade);
+            return ResponseEntity.ok("Signal Processed Successfully");
+        } else {
+            return ResponseEntity.internalServerError().body("Execution Failed");
         }
     }
 }

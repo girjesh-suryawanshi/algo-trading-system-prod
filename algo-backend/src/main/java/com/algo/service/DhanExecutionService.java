@@ -13,6 +13,11 @@ public class DhanExecutionService {
 
     public boolean placeOrder(Trade trade) {
         User user = trade.getUser();
+        if (user.getPaperTradingMode()) {
+            System.out.println("PAPER MODE: Skipping API key validation for User: " + user.getEmail());
+            return true;
+        }
+
         String accessToken = encryptionService.decrypt(user.getDhanAccessToken());
         String clientId = encryptionService.decrypt(user.getDhanClientId());
 
@@ -22,7 +27,7 @@ public class DhanExecutionService {
         }
 
         // Real Dhan API call would go here using decrypted accessToken/clientId
-        System.out.println("Placing order for User: " + user.getEmail() + " | Strike: " + trade.getStrike() + " Type: " + trade.getOptionType());
+        System.out.println("LIVE MODE: Placing order for User: " + user.getEmail() + " | Strike: " + trade.getStrike() + " Type: " + trade.getOptionType());
         return true;
     }
     

@@ -14,6 +14,9 @@ public class Trade {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Transient
+    private Long userId;
+
     private String symbol;
     private Integer strike;
     private String optionType;
@@ -37,6 +40,7 @@ public class Trade {
     @JoinColumn(name = "user_id")
     private User user;
 
+    private String tradeMode; // PAPER or LIVE
     private LocalDateTime createdAt;
     private LocalDateTime closedAt;
 }

@@ -61,4 +61,12 @@ public class User {
     private Integer newsBufferMinutes = 30;
 
     private String role;
+
+    @Builder.Default
+    @Column(name = "virtual_balance")
+    private Double virtualBalance = 1000000.0;
+
+    @Builder.Default
+    @Column(name = "paper_trading_mode")
+    private Boolean paperTradingMode = true;
 }

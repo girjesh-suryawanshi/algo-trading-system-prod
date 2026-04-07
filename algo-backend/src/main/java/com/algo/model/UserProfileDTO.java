@@ -30,4 +30,5 @@ public class UserProfileDTO {
     private Double vixThreshold;
     private Boolean newsKillSwitchActive;
     private Integer newsBufferMinutes;
+    private Boolean paperTradingMode;
 }

@@ -33,17 +33,26 @@ public class TradeController {
     public ResponseEntity<String> execute(@RequestBody Trade trade) {
         User user = getCurrentUser();
         trade.setUser(user);
+        trade.setTradeMode(user.getPaperTradingMode() ? "PAPER" : "LIVE");
 
         if (!riskService.isSafeToTrade(trade)) {
             trade.setStatus("REJECTED");
             trade.setCreatedAt(LocalDateTime.now());
             repo.save(trade);
-            return ResponseEntity.badRequest().body("Risk limits hit or Kill switch active");
+            return ResponseEntity.badRequest().body("Risk Blocked: Daily limits or Kill switch active");
         }
 
         if (executionService.placeOrder(trade)) {
             trade.setStatus("OPEN");
             trade.setCreatedAt(LocalDateTime.now());
+            
+            // Deduct from Virtual Balance only in PAPER mode
+            if ("PAPER".equals(trade.getTradeMode())) {
+                double cost = trade.getEntryPrice() * trade.getQty();
+                user.setVirtualBalance(user.getVirtualBalance() - cost);
+                userRepo.save(user);
+            }
+
             repo.save(trade);
             return ResponseEntity.ok("Trade Executed Successfully");
         } else {
