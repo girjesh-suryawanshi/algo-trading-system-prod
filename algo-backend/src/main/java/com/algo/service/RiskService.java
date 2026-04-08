@@ -27,6 +27,7 @@ public class RiskService {
     private static final int DEFAULT_NEWS_BUFFER = 30;
 
     public boolean isSafeToTrade(Trade trade) {
+        if (Boolean.TRUE.equals(trade.getManualTrade())) return true; // Bypass for manual trades
         if (killSwitch) return false;
 
         // Try to get user settings from the trade's user or the first user in DB

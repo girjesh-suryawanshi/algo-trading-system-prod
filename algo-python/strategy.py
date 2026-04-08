@@ -70,6 +70,7 @@ class StrategyManager:
             security_id = best_qualified['securityId']
             current_ltp = best_qualified['ltp']
             opt_type = best_qualified['optionType']
+            current_oi = best_qualified.get('oi', 0)
             
             # If we already have a pending strike, check if it's the same or if we should replace it
             current_pending = self.state.get("PENDING_SIGNAL")
@@ -84,6 +85,9 @@ class StrategyManager:
                 lows = [c['low'] for c in history.get('data', []) if isinstance(c, dict) and 'low' in c]
                 contract_low = min(lows) if lows else current_ltp
                 
+                # Rule: Dynamic LOW - min of history and current price
+                contract_low = min(contract_low, current_ltp)
+                
                 entry_price = contract_low * 2
                 sl_price = contract_low - 1
                 risk = entry_price - sl_price
@@ -94,27 +98,39 @@ class StrategyManager:
                     "low": contract_low,
                     "entry": entry_price,
                     "stopLoss": sl_price,
-                    "target": round(entry_price + (2 * risk), 2), # Default to 1:2 per logic
+                    "target": round(entry_price + (2 * risk), 2),
                     "optionType": opt_type,
                     "status": "WAITING",
                     "symbol": self.symbol,
                     "expiry": self.expiry,
-                    "ltp": current_ltp
+                    "ltp": current_ltp,
+                    "oi": current_oi
                 }
                 
-                # Send Signal to Backend (Rule #3: Create Pending Order)
+                # Send Signal to Backend
                 self.send_signal(new_signal)
                 self.state["PENDING_SIGNAL"] = new_signal
-                self.state[opt_type] = new_signal # For UI display
+                # Removed redundant self.state[opt_type] to fix UI duplication
                 
             else:
-                # Same strike, just update LTP
+                # Same strike, update LTP and OI
                 self.state["PENDING_SIGNAL"]["ltp"] = current_ltp
-                self.state[opt_type]["ltp"] = current_ltp
+                self.state["PENDING_SIGNAL"]["oi"] = current_oi
                 
-                # Check for Execution (Rule #6: LTP hits Entry)
-                # Note: In real setup, the broker handles the pending order. 
-                # We track it here to move it to 'active_trades' once we detect execution.
+                # Rule: Dynamic LOW - If current price is lower than our tracked LOW, update rules
+                if current_ltp < self.state["PENDING_SIGNAL"]["low"]:
+                    print(f">>> [UPDATE] User {self.user_id}: New LOW found at {current_ltp}. Updating rules.")
+                    new_low = current_ltp
+                    self.state["PENDING_SIGNAL"]["low"] = new_low
+                    self.state["PENDING_SIGNAL"]["entry"] = new_low * 2
+                    self.state["PENDING_SIGNAL"]["stopLoss"] = new_low - 1
+                    risk = self.state["PENDING_SIGNAL"]["entry"] - self.state["PENDING_SIGNAL"]["stopLoss"]
+                    self.state["PENDING_SIGNAL"]["target"] = round(self.state["PENDING_SIGNAL"]["entry"] + (2 * risk), 2)
+                    
+                    # Re-send updated signal to backend
+                    self.send_signal(self.state["PENDING_SIGNAL"])
+                
+                # Check for Execution (Rule #6)
                 if current_ltp >= self.state["PENDING_SIGNAL"]["entry"]:
                     pending = self.state["PENDING_SIGNAL"]
                     self.active_trades[opt_type] = {
@@ -123,9 +139,11 @@ class StrategyManager:
                         "target": pending["target"],
                         "securityId": pending["securityId"]
                     }
-                    self.state[opt_type]["status"] = "EXECUTED"
-                    del self.state["PENDING_SIGNAL"]
+                    # We store the executed trade in a separate state for the UI, but clean the scanner
                     alert_entry(self.symbol, pending["strike"], pending["entry"])
+                    del self.state["PENDING_SIGNAL"]
+
+        return self.state
 
         return self.state
 
@@ -148,6 +166,7 @@ class StrategyManager:
             "stopLoss": signal['stopLoss'],
             "target1": signal['target'],
             "qty": 50,
+            "oi": signal.get('oi', 0),
             "strategyName": "LowX2",
             "userId": self.user_id,
             "isPending": True # Hint to backend to use LIMIT order

@@ -35,6 +35,7 @@ public class TradeController {
     public ResponseEntity<String> execute(@RequestBody Trade trade) {
         User user = getCurrentUser();
         trade.setUser(user);
+        trade.setManualTrade(true);
         trade.setTradeMode(user.getPaperTradingMode() ? "PAPER" : "LIVE");
 
         if (!riskService.isSafeToTrade(trade)) {
@@ -85,21 +86,42 @@ public class TradeController {
         Long userId = Long.valueOf(signal.get("userId").toString());
         User user = userRepo.findById(userId).orElseThrow();
 
-        Trade trade = new Trade();
-        trade.setUser(user);
-        trade.setSymbol(signal.get("symbol").toString());
-        trade.setStrike((int) Double.parseDouble(signal.get("strike").toString()));
-        trade.setOptionType(signal.get("optionType").toString());
+        boolean isPending = signal.containsKey("isPending") && (boolean) signal.get("isPending");
+        String status = isPending ? "WAITING" : "OPEN";
+
+        // Fix Duplicate Strike: Check if a WAITING trade already exists for this strike
+        Optional<Trade> existing = repo.findByUserAndStrikeAndSymbolAndOptionTypeAndStatus(
+                user, 
+                (int) Double.parseDouble(signal.get("strike").toString()),
+                signal.get("symbol").toString(),
+                signal.get("optionType").toString(),
+                "WAITING"
+        );
+
+        Trade trade;
+        if (existing.isPresent()) {
+            trade = existing.get();
+        } else {
+            trade = new Trade();
+            trade.setUser(user);
+            trade.setSymbol(signal.get("symbol").toString());
+            trade.setStrike((int) Double.parseDouble(signal.get("strike").toString()));
+            trade.setOptionType(signal.get("optionType").toString());
+            trade.setStrategyName(signal.get("strategyName").toString());
+            trade.setTradeMode(user.getPaperTradingMode() ? "PAPER" : "LIVE");
+            trade.setCreatedAt(LocalDateTime.now());
+        }
+
+        // Always update prices and OI
         trade.setEntryPrice(Double.parseDouble(signal.get("entryPrice").toString()));
         trade.setStopLoss(Double.parseDouble(signal.get("stopLoss").toString()));
         trade.setTarget1(Double.parseDouble(signal.get("target1").toString()));
         trade.setQty(Integer.parseInt(signal.get("qty").toString()));
-        trade.setStrategyName(signal.get("strategyName").toString());
-        trade.setTradeMode(user.getPaperTradingMode() ? "PAPER" : "LIVE");
-        trade.setCreatedAt(LocalDateTime.now());
-
-        boolean isPending = signal.containsKey("isPending") && (boolean) signal.get("isPending");
-        trade.setStatus(isPending ? "WAITING" : "OPEN");
+        if (signal.containsKey("oi")) {
+            trade.setOi(Long.valueOf(signal.get("oi").toString()));
+        }
+        trade.setStatus(status);
+        trade.setManualTrade(false);
 
         if (executionService.placeOrder(trade)) {
             repo.save(trade);

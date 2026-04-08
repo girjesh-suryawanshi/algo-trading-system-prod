@@ -624,7 +624,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         stopLoss: this.manualTrade.stopLoss,
         target1: this.manualTrade.target1,
         tslPercentage: this.manualTrade.tslPercentage,
-        strategyName: "Manual"
+        strategyName: "Manual",
+        manualTrade: true
     };
 
     this.http.post(`${this.baseUrl}/trade`, payload).subscribe({

@@ -10,4 +10,5 @@ public interface TradeRepository extends JpaRepository<Trade, Long> {
     List<Trade> findByUser(User user);
     List<Trade> findByUserAndCreatedAtAfter(User user, LocalDateTime timestamp);
     List<Trade> findByUserAndStatus(User user, String status);
+    java.util.Optional<Trade> findByUserAndStrikeAndSymbolAndOptionTypeAndStatus(User user, Integer strike, String symbol, String optionType, String status);
 }

@@ -35,6 +35,8 @@ public class Trade {
     private Double trailingSL;
     private Double tslPercentage;
     private Integer qty;
+    private Long oi;
+    private Boolean manualTrade = false;
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
