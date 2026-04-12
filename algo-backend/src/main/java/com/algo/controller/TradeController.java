@@ -136,19 +136,20 @@ public class TradeController {
 
         Long userId = Long.valueOf(signal.get("userId").toString());
         String optType = signal.get("optionType").toString();
+        String symbol = signal.get("symbol").toString();
         
-        // Find existing WAITING trade for this user and option type
+        // Find existing WAITING trade for this user, symbol and option type
         List<Trade> pending = repo.findByUserAndStatus(userRepo.findById(userId).get(), "WAITING");
-        Optional<Trade> target = pending.stream().filter(t -> t.getOptionType().equals(optType)).findFirst();
+        Optional<Trade> target = pending.stream()
+                .filter(t -> t.getOptionType().equals(optType) && t.getSymbol().equals(symbol))
+                .findFirst();
 
         if (target.isPresent()) {
             Trade t = target.get();
-            if (executionService.cancelOrder(t)) {
-                t.setStatus("CANCELLED");
-                repo.save(t);
-                return ResponseEntity.ok("Pending Order Cancelled");
-            }
+            t.setStatus("CANCELLED");
+            repo.save(t);
+            return ResponseEntity.ok("Pending Order " + optType + " Cancelled");
         }
-        return ResponseEntity.ok("No pending order to cancel or cancellation failed");
+        return ResponseEntity.ok("No pending order found to cancel");
     }
 }

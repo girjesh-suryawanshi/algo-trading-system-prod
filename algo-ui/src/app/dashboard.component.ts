@@ -550,25 +550,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   getTrackedStrikes() {
-    const excludeKeys = ['option_chain', 'indiaVix'];
+    const pendingSignals = this.strategyState['PENDING_SIGNALS'] || {};
     const chain = this.strategyState['option_chain'] || [];
     
-    return Object.keys(this.strategyState)
-      .filter(k => !excludeKeys.includes(k))
-      .map(key => {
-        const item = { ...this.strategyState[key] };
-        // Fallback: If LTP is 0, try to fetch from Option Chain state
-        if (item.ltp === 0) {
-          const match = chain.find((c: any) => 
-            c.strikePrice === item.strike && 
-            c.optionType === item.optionType
-          );
-          if (match && match.ltp > 0) {
-            item.ltp = match.ltp;
-          }
+    return Object.keys(pendingSignals).map(key => {
+      const item = { ...pendingSignals[key] };
+      // Fallback: If LTP is 0, try to fetch from Option Chain state
+      if (item.ltp === 0) {
+        const match = chain.find((c: any) => 
+          c.strikePrice === item.strike && 
+          c.optionType === item.optionType
+        );
+        if (match && match.ltp > 0) {
+          item.ltp = match.ltp;
         }
-        return { key, value: item };
-      });
+      }
+      return { key, value: item };
+    });
   }
 
   getWorkingOrders() {
@@ -600,9 +598,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.selectedTrackItem = item;
     this.manualTrade.strike = item.strike;
     this.manualTrade.optionType = item.optionType;
-    this.manualTrade.entryPrice = item.entry || item.ltp;
+    this.manualTrade.entryPrice = item.entryPrice || item.ltp;
     this.manualTrade.stopLoss = item.stopLoss || Math.round(this.manualTrade.entryPrice! * 0.9);
-    this.manualTrade.target1 = Math.round(this.manualTrade.entryPrice! * 1.1);
+    this.manualTrade.target1 = item.target1 || Math.round(this.manualTrade.entryPrice! * 1.1);
     this.showOrderModal = true;
   }
 

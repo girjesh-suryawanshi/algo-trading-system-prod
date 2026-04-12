@@ -31,7 +31,7 @@ async def run_user_loop(user_id: int):
             await asyncio.to_thread(manager.run_strategy)
         except Exception as e:
             print(f">>> [ENGINE] Strategy error for User {user_id}: {e}")
-        await asyncio.sleep(5)
+        await asyncio.sleep(10)
     print(f">>> [ENGINE] Stopped loop for User {user_id}")
 
 class EngineRequest(BaseModel):
