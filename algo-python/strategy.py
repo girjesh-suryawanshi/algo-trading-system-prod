@@ -1,5 +1,6 @@
 import os
 import requests
+from datetime import datetime, timedelta
 from dhan_api import get_option_chain, get_ltp, get_historical_data
 from alerts import alert_entry
 
@@ -30,6 +31,33 @@ class StrategyManager:
 
         self.SPRING_URL = os.getenv("SPRING_URL", "http://backend:8080/api/trade")
 
+    def calculate_lookback_horizon(self):
+        """
+        Calculates the required historical lookback days based on how far away
+        the current expiry in the strategy is from Today.
+        """
+        try:
+            if not self.expiry or len(self.expiry) < 8:
+                return 15 # Default safe fallback
+            
+            # Parse expiry date (Format: YYYY-MM-DD)
+            expiry_date = datetime.strptime(self.expiry.strip(), "%Y-%m-%d")
+            today = datetime.now()
+            days_to_expiry = (expiry_date - today).days
+
+            if days_to_expiry <= 7:
+                # Current week expiry - but we look back enough to see the full month history if it's a monthly
+                return 25 
+            elif days_to_expiry <= 14:
+                # Next week expiry
+                return 35
+            else:
+                # Monthly or further
+                return 60
+        except Exception as e:
+            print(f"⚠️ Lookback Calculation Error: {e}")
+            return 15 # Safe fallback
+
     # =========================
     # 🎯 STRIKE SELECTION
     # =========================
@@ -57,38 +85,63 @@ class StrategyManager:
     # =========================
     def get_true_low(self, security_id, current_ltp):
         """
-        Calculates the true low by combining a high-granularity 7-day 1-minute scan 
-        with continuous real-time LTP tracking. 
-        Ensures we capture the absolute lifetime low of the contract within the last week.
+        Calculates the true low using the TWO-STAGE SNIPER method:
+        1. Macro Daily Scan: Finds the specific day the absolute low occurred over a dynamic horizon.
+        2. Micro 1-Minute Scan: Concentrates a high-granularity fetch ONLY on that day for precision.
         """
         if security_id not in self.global_lows:
-            # 1. Fetch high-granularity 1-minute history for the last 7 days.
-            # This is much more accurate for finding the absolute floor (e.g. 5.0) 
-            # than Daily candles.
-            history = get_historical_data(
-                self.access_token,
-                self.client_id,
-                security_id,
-                "NSE_FNO", 
-                days=7,
-                interval="1"
+            # --- STAGE 1: MACRO SCAN (DAILY) ---
+            horizon = self.calculate_lookback_horizon()
+            print(f"🔍 [SNIPER STAGE 1] Macro scanning {horizon} days for ID: {security_id} (Expiry: {self.expiry})")
+            
+            macro_history = get_historical_data(
+                self.access_token, self.client_id, security_id, "NSE_FNO",
+                days=horizon, interval="D"
             )
+            
+            macro_data = macro_history.get('data', [])
+            if not macro_data:
+                # API failed or busy: Return current_ltp for this specific tick but retry history next loop.
+                print(f"⚠️ [SNIPER] Macro scan PENDING or FAILED (Retrying later) - ID: {security_id}")
+                return current_ltp
 
-            lows = [
-                c['low'] for c in history.get('data', [])
+            # Find the best candidate day (minimum low)
+            best_day_candle = min(macro_data, key=lambda x: x.get('low', float('inf')))
+            macro_low = best_day_candle.get('low')
+            low_timestamp = best_day_candle.get('timestamp', 0)
+
+            if not low_timestamp or macro_low <= 0:
+                print(f"⚠️ [SNIPER] Invalid macro results for ID: {security_id}")
+                return current_ltp
+
+            # --- STAGE 2: MICRO ZOOM (1-MINUTE) ---
+            # We zoom into a 4-day window centered on the discovered low timestamp to be absolutely precise
+            low_date_obj = datetime.fromtimestamp(low_timestamp)
+            from_date = (low_date_obj - timedelta(days=2)).strftime("%Y-%m-%d")
+            to_date = (low_date_obj + timedelta(days=2)).strftime("%Y-%m-%d")
+            
+            print(f"🎯 [SNIPER STAGE 2] Zooming into 1-minute data ({from_date} to {to_date}) for ID: {security_id}")
+            
+            micro_history = get_historical_data(
+                self.access_token, self.client_id, security_id, "NSE_FNO",
+                interval="1",
+                from_date_str=from_date,
+                to_date_str=to_date
+            )
+            
+            micro_lows = [
+                c['low'] for c in micro_history.get('data', [])
                 if isinstance(c, dict) and c.get('low', 0) > 0
             ]
 
-            if lows:
-                # Successfully found historical floor - Lock it in.
-                api_low = min(lows)
-                self.global_lows[security_id] = api_low
-                print(f"📊 7-DAY MINUTE FLOOR SEALED: {api_low} (ID: {security_id})")
+            if micro_lows:
+                true_floor = min(micro_lows)
+                self.global_lows[security_id] = true_floor
+                print(f"✅ [SNIPER SEALED] Absolute 1-min Floor: {true_floor} (ID: {security_id})")
             else:
-                # API failed or busy: DO NOT lock in current LTP as the historical floor.
-                # Instead, return current_ltp for this specific tick but retry history next loop.
-                print(f"⚠️ HISTORY FETCH PENDING (Retrying later) - ID: {security_id}")
-                return current_ltp
+                # Fallback to macro low if micro scan fails
+                self.global_lows[security_id] = macro_low
+                print(f"⚠️ [SNIPER FALLBACK] Micro scan empty, locking Macro floor: {macro_low} ID: {security_id}")
 
         # 2. Real-time tracking: Update the low if current LTP breaks below our stored base
         current_base = self.global_lows.get(security_id, current_ltp)

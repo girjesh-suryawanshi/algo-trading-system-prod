@@ -134,12 +134,12 @@ def get_option_chain(access_token, client_id, security_id, segment, expiry):
 # =========================
 # 📉 HISTORICAL DATA (SAFE VERSION)
 # =========================
-def get_historical_data(access_token, client_id, security_id, segment, days=30, interval="1"):
+def get_historical_data(access_token, client_id, security_id, segment, days=30, interval="1", from_date_str=None, to_date_str=None):
 
     url = f"{BASE_URL}/charts/historical"
 
-    to_date = datetime.now().strftime("%Y-%m-%d")
-    from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    to_date = to_date_str if to_date_str else datetime.now().strftime("%Y-%m-%d")
+    from_date = from_date_str if from_date_str else (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
     payload = {
         "securityId": str(security_id),
@@ -163,7 +163,14 @@ def get_historical_data(access_token, client_id, security_id, segment, days=30, 
                 
                 if isinstance(charts, dict):
                     lows_array = charts.get("low", [])
-                    candles = [{"low": float(l)} for l in lows_array if l and float(l) > 0]
+                    # Dhan historical charts API uses 'timestamp' or 'start_Time' for X-axis
+                    ts_array = charts.get("timestamp", charts.get("start_Time", []))
+                    candles = []
+                    for i in range(len(lows_array)):
+                        l = lows_array[i]
+                        if l and float(l) > 0:
+                            ts = ts_array[i] if i < len(ts_array) else 0
+                            candles.append({"low": float(l), "timestamp": ts})
                 else:
                     candles = []
                     
