@@ -34,7 +34,12 @@ public class JwtFilter extends OncePerRequestFilter {
         }
 
         final String jwt = authHeader.substring(7);
-        final String userEmail = jwtService.getEmailFromToken(jwt);
+        String userEmail = null;
+        try {
+            userEmail = jwtService.getEmailFromToken(jwt);
+        } catch (Exception e) {
+            System.out.println("JWT Parsing failed: " + e.getMessage());
+        }
 
         if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             if (jwtService.validateToken(jwt)) {

@@ -20,6 +20,8 @@ public class Trade {
     private String symbol;
     private Integer strike;
     private String optionType;
+    private String securityId;
+    private String exchangeSegment;
 
     private Double entryPrice;
     private Double stopLoss;
@@ -43,6 +45,7 @@ public class Trade {
     private User user;
 
     private String tradeMode; // PAPER or LIVE
+    private String dhanOrderId;
     private LocalDateTime createdAt;
     private LocalDateTime closedAt;
 }

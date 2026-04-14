@@ -157,10 +157,16 @@ def get_historical_data(access_token, client_id, security_id, segment, days=30, 
             if res.status_code == 200:
                 data = _safe_json(res)
                 print(f"🔥 RAW DHAN API HISTORICAL RESPONSE: {data}")
-                candles = [
-                    c for c in data.get("data", [])
-                    if isinstance(c, dict) and c.get("low", 0) > 0
-                ]
+                
+                # Check if it's wrapped in 'data' or flat
+                charts = data.get("data") if "open" not in data else data
+                
+                if isinstance(charts, dict):
+                    lows_array = charts.get("low", [])
+                    candles = [{"low": float(l)} for l in lows_array if l and float(l) > 0]
+                else:
+                    candles = []
+                    
                 return {"data": candles}
             
             elif res.status_code == 429:

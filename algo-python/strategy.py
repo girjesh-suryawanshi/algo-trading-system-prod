@@ -113,7 +113,7 @@ class StrategyManager:
         self.state['option_chain'] = options
 
         # =========================
-        # 🧠 ACTIVE TRADES
+        # 🧠 ACTIVE TRADES (WITH TRAILING SL)
         # =========================
         for key in list(self.active_trades.keys()):
             trade = self.active_trades[key]
@@ -122,16 +122,44 @@ class StrategyManager:
             if ltp <= 0:
                 continue
 
+            # 🛑 1. CHECK TARGET HIT
             if ltp >= trade['target']:
                 print(f"✅ TARGET HIT {key}")
+                self.send_exit_signal(trade, "TARGET_HIT", trade['target'])
                 del self.active_trades[key]
+                continue
 
-            elif ltp <= trade['sl']:
+            # 🛑 2. CHECK SL HIT (FIXED OR TRAILED)
+            if ltp <= trade['sl']:
                 print(f"❌ SL HIT {key}")
+                self.send_exit_signal(trade, "SL_HIT", trade['sl'])
                 del self.active_trades[key]
+                continue
+
+            # 📈 3. TRAILING STOP LOSS LOGIC
+            # If price reaches Entry + Step, trail SL by Step
+            if self.tsl_step > 0:
+                # Initialize last_trailed_at if not present
+                if "last_trail_ltp" not in trade:
+                    trade["last_trail_ltp"] = trade["entry"]
+
+                # Check if price has moved up enough to trigger a trail
+                diff = ltp - trade["last_trail_ltp"]
+                if diff >= self.tsl_step:
+                    num_steps = int(diff // self.tsl_step)
+                    trail_amount = num_steps * self.tsl_step
+                    
+                    old_sl = trade["sl"]
+                    trade["sl"] = round(trade["sl"] + trail_amount, 2)
+                    trade["last_trail_ltp"] = trade["last_trail_ltp"] + trail_amount
+                    
+                    print(f"🔄 TRAILING SL: {key} | Moved SL from {old_sl} to {trade['sl']}")
+                    
+                    # Notify Java Backend of the SL update (for UI sync)
+                    self.notify_sl_update(trade)
 
         # =========================
-        # 🔍 NEW SIGNALS
+        # 🔍 NEW SIGNALS (ENTRY)
         # =========================
         candidates = self.select_best_strikes(options)
 
@@ -141,6 +169,13 @@ class StrategyManager:
         for opt in candidates:
 
             opt_type = opt['optionType']
+            
+            # PREVENT MULTI-EXECUTION BUG:
+            # If we already have an active OPEN trade for this side (CE/PE), 
+            # do not track new candidates for it until the active one exits.
+            if opt_type in self.active_trades:
+                continue
+
             strike = opt['strikePrice']
             security_id = opt['securityId']
             ltp = opt['ltp']
@@ -182,8 +217,14 @@ class StrategyManager:
                         "entry": existing["entryPrice"],
                         "sl": existing["stopLoss"],
                         "target": existing["target1"],
-                        "securityId": security_id
+                        "securityId": security_id,
+                        "symbol": existing["symbol"],
+                        "optionType": opt_type
                     }
+
+                    # Send EXECUTION POST to Java
+                    existing["isPending"] = False
+                    self.send_signal(existing)
 
                     alert_entry(self.symbol, strike, existing["entryPrice"])
                     del self.state["PENDING_SIGNALS"][opt_type]
@@ -213,6 +254,8 @@ class StrategyManager:
                     "target1": round(entry + 2 * risk, 2),
                     "ltp": ltp,
                     "oi": oi,
+                    "status": "WAITING",
+                    "expiry": self.expiry,
                     "isPending": True
                 }
 
@@ -221,7 +264,7 @@ class StrategyManager:
 
         return self.state
 
-       # =========================
+    # =========================
     # 📡 SIGNAL
     # =========================
     def send_signal(self, signal):
@@ -233,10 +276,10 @@ class StrategyManager:
                 "entryPrice": signal['entryPrice'],
                 "stopLoss": signal['stopLoss'],
                 "target1": signal['target1'],
-                "qty": 65,
-                "strategyName": "LowX2-TrueLow",
+                "qty": 75,
+                "strategy_name": "LowX2",
                 "userId": self.user_id,
-                "isPending": True
+                "isPending": signal.get('isPending', True)
             }
 
             headers = {"X-Engine-Token": "lumina-secret-2026"}
@@ -248,11 +291,45 @@ class StrategyManager:
             print(f"Signal error: {e}")
 
     # =========================
+    # 🚪 EXIT SIGNAL
+    # =========================
+    def send_exit_signal(self, trade, status, exit_price):
+        try:
+            payload = {
+                "userId": self.user_id,
+                "symbol": trade.get('symbol', 'UNKNOWN'),
+                "optionType": trade.get('optionType', 'CE'),
+                "status": status,
+                "exitPrice": exit_price
+            }
+            headers = {"X-Engine-Token": "lumina-secret-2026"}
+            url = self.SPRING_URL.replace("/api/trade", "/api/engine/exit")
+            requests.post(url, json=payload, headers=headers, timeout=5)
+        except Exception as e:
+            print(f"Exit Signal error: {e}")
+
+    # =========================
+    # 🔄 TSL UPDATE NOTIFICATION
+    # =========================
+    def notify_sl_update(self, trade):
+        try:
+            payload = {
+                "userId": self.user_id,
+                "symbol": trade.get('symbol', 'UNKNOWN'),
+                "optionType": trade.get('optionType', 'CE'),
+                "stopLoss": trade.get('sl')
+            }
+            headers = {"X-Engine-Token": "lumina-secret-2026"}
+            url = self.SPRING_URL.replace("/api/trade", "/api/engine/update")
+            requests.post(url, json=payload, headers=headers, timeout=5)
+        except Exception as e:
+            print(f"TSL Update error: {e}")
+
+    # =========================
     # 🚀 RUN STRATEGY (FIXED)
     # =========================
     def run_strategy(self):
         try:
-            print("🔥 Strategy Running...")
             return self.process_strategy_logic()
         except Exception as e:
             print(f"❌ Strategy runtime error: {e}")

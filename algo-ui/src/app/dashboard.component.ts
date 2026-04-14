@@ -89,7 +89,7 @@ import { Router } from '@angular/router';
           <div class="kpi-grid">
             <div class="glass-card kpi-card neon-border">
               <small class="text-muted">Virtual Balance</small>
-              <div class="kpi-value neon-purple">₹{{ virtualBalance | number:'1.0-0' }}</div>
+              <div class="kpi-value neon-purple">₹{{ virtualBalance | number:'1.2-2' }}</div>
             </div>
             <div class="glass-card kpi-card">
               <small class="text-muted">Daily PnL</small>
@@ -478,6 +478,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   refreshData() {
+    this.fetchProfile();
+
     this.http.get<any[]>(`${this.baseUrl}/trades`).subscribe({
       next: (res) => {
         this.trades = res.reverse();

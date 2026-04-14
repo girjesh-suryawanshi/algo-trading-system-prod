@@ -51,6 +51,7 @@ public class ProfileController {
                 .newsKillSwitchActive(user.getNewsKillSwitchActive())
                 .newsBufferMinutes(user.getNewsBufferMinutes())
                 .paperTradingMode(user.getPaperTradingMode())
+                .virtualBalance(user.getVirtualBalance())
                 .build());
     }
 

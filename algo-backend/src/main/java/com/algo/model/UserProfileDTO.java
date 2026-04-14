@@ -31,4 +31,5 @@ public class UserProfileDTO {
     private Boolean newsKillSwitchActive;
     private Integer newsBufferMinutes;
     private Boolean paperTradingMode;
+    private Double virtualBalance;
 }

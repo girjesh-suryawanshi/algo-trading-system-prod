@@ -16,7 +16,8 @@ public class TradeMonitoringService {
     private final TradeRepository tradeRepository;
     private final DhanExecutionService executionService;
 
-    @Scheduled(fixedRate = 5000) // Every 5 seconds
+    // Disabled: Python StrategyEngine now manages and reports Live Trades natively.
+    // @Scheduled(fixedRate = 5000) // Every 5 seconds
     public void monitorTrades() {
         List<Trade> openTrades = tradeRepository.findAll().stream()
                 .filter(t -> "OPEN".equals(t.getStatus()))
@@ -28,9 +29,10 @@ public class TradeMonitoringService {
 
             if (currentLtp <= trade.getStopLoss()) {
                 exitTrade(trade, currentLtp, "SL_HIT");
-            } else if (currentLtp >= trade.getTarget3()) {
+            } else if (trade.getTarget3() != null && currentLtp >= trade.getTarget3()) {
                 exitTrade(trade, currentLtp, "TARGET_HIT");
-            } else if (currentLtp >= trade.getTarget2() || currentLtp >= trade.getTarget1()) {
+            } else if ((trade.getTarget2() != null && currentLtp >= trade.getTarget2()) || 
+                       (trade.getTarget1() != null && currentLtp >= trade.getTarget1())) {
                 // Partial booking or trailing SL could be implemented here
                 System.out.println("Profit target 1/2 reached for " + trade.getSymbol());
             }
