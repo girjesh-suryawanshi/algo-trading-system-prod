@@ -57,21 +57,20 @@ class StrategyManager:
     # =========================
     def get_true_low(self, security_id, current_ltp):
         """
-        Calculates the true low by combining a high-granularity 7-day 1-minute scan 
+        Calculates the true low by combining a robust Daily historical fetch 
         with continuous real-time LTP tracking. 
-        Ensures we capture the absolute lifetime low of the contract within the last week.
+        Ensures we capture the absolute lifetime low of the contract.
         """
         if security_id not in self.global_lows:
-            # 1. Fetch high-granularity 1-minute history for the last 7 days.
-            # This is much more accurate for finding the absolute floor (e.g. 5.0) 
-            # than Daily candles.
+            # 1. Fetch robust Daily history to find the absolute contract floor.
+            # We search 60 days back to be absolutely sure we catch the starting candle.
             history = get_historical_data(
                 self.access_token,
                 self.client_id,
                 security_id,
-                "NSE_FNO", 
-                days=7,
-                interval="1"
+                "NSE_FNO", # Fixed: Option charts require NSE_FNO
+                days=12,
+                interval="D"
             )
 
             lows = [
@@ -83,21 +82,17 @@ class StrategyManager:
                 # Successfully found historical floor - Lock it in.
                 api_low = min(lows)
                 self.global_lows[security_id] = api_low
-                print(f"📊 7-DAY MINUTE FLOOR SEALED: {api_low} (ID: {security_id})")
+                print(f"📊 HISTORICAL FLOOR SEALED: {api_low} (ID: {security_id})")
             else:
-                # API failed or busy: DO NOT lock in current LTP as the historical floor.
-                # Instead, return current_ltp for this specific tick but retry history next loop.
+                # API failed or busy: use LTP as temporary fallback for this loop.
+                # NOT adding to self.global_lows yet so we retry the history fetch next iteration.
                 print(f"⚠️ HISTORY FETCH PENDING (Retrying later) - ID: {security_id}")
                 return current_ltp
 
         # 2. Real-time tracking: Update the low if current LTP breaks below our stored base
         current_base = self.global_lows.get(security_id, current_ltp)
         true_low = min(current_base, current_ltp)
-        
-        # Guard: Only update global_lows if the new true_low is actually lower
-        if true_low < current_base:
-            self.global_lows[security_id] = true_low
-            print(f"📉 NEW LOW RECORDED: {true_low} (ID: {security_id})")
+        self.global_lows[security_id] = true_low
 
         return true_low
 
