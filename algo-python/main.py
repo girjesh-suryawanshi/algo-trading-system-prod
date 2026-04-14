@@ -140,10 +140,18 @@ class BacktestRequest(BaseModel):
     toDate: str
     accessToken: str
     clientId: str
+    symbol: str = "NIFTY"
+    securityId: str = "13"
+    segment: str = "IDX_I"
+    expiryFlag: str = "WEEK"
+    expiryCode: int = 1
 
 @app.post("/backtest")
 async def backtest(req: BacktestRequest):
-    df = await fetch_historical_chain(req.fromDate, req.toDate, req.accessToken, req.clientId)
+    df = await fetch_historical_chain(
+        req.fromDate, req.toDate, req.accessToken, req.clientId,
+        req.symbol, req.securityId, req.segment, req.expiryFlag, req.expiryCode
+    )
     if df.empty:
         return {"error": "No data found. Check your Dhan API keys."}
     return run_backtest(df)

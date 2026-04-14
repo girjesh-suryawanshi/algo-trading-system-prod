@@ -69,7 +69,8 @@ def run_backtest(df):
                 close_px = float(best_option['close'])
                 
                 if opt_type not in state or state[opt_type]['strike'] != strike:
-                    weekly_low = close_px
+                    historical_floor = float(best_option['historical_floor']) if 'historical_floor' in best_option else 999999.0
+                    weekly_low = min(close_px, historical_floor)
                     state[opt_type] = {
                         "strike": strike,
                         "low": weekly_low,

@@ -240,21 +240,67 @@ import { Router } from '@angular/router';
         </div>
 
         <!-- BACKTEST VIEW -->
-        <div *ngIf="currentView === 'BACKTEST'">
-            <div class="glass-card">
-              <h3>🧪 Strategy Backtest Lab</h3>
-              <div style="display: flex; gap: 16px; align-items: flex-end; margin-top: 20px;">
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                   <small class="text-muted">From Date</small>
-                   <input type="text" [(ngModel)]="backtestReq.fromDate" placeholder="YYYY-MM-DD">
+            <div class="glass-card backtest-lab">
+              <div class="lab-header">
+                <h3>🧪 Strategy Backtest Lab</h3>
+                <p class="text-muted">High-fidelity simulation using Dhan Rolling Options API</p>
+              </div>
+
+              <div class="lab-controls">
+                <div class="control-group">
+                   <label>Instrument</label>
+                   <div class="neon-select-wrapper">
+                     <select [(ngModel)]="backtestReq.symbol" (change)="onBacktestInstrumentChange()" [disabled]="isBacktesting">
+                        <option value="NIFTY">NIFTY 50</option>
+                        <option value="BANKNIFTY">BANK NIFTY</option>
+                        <option value="FINNIFTY">FIN NIFTY</option>
+                     </select>
+                   </div>
                 </div>
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                   <small class="text-muted">To Date</small>
-                   <input type="text" [(ngModel)]="backtestReq.toDate" placeholder="YYYY-MM-DD">
+                
+                <div class="control-group">
+                   <label>Expiry Cycle</label>
+                   <div class="neon-select-wrapper">
+                     <select [(ngModel)]="backtestReq.expiryFlag" [disabled]="isBacktesting">
+                        <option value="WEEK">WEEKLY</option>
+                        <option value="MONTH">MONTHLY</option>
+                     </select>
+                   </div>
                 </div>
-                <button (click)="runBacktest()" class="btn-secondary" [disabled]="isBacktesting">
-                  {{ isBacktesting ? 'SIMULATING...' : 'RUN SIMULATION' }}
+
+                <div class="control-group">
+                   <label>From Date</label>
+                   <input type="date" [(ngModel)]="backtestReq.fromDate" [disabled]="isBacktesting" class="neon-input">
+                </div>
+
+                <div class="control-group">
+                   <label>To Date</label>
+                   <input type="date" [(ngModel)]="backtestReq.toDate" [disabled]="isBacktesting" class="neon-input">
+                </div>
+
+                <button (click)="runBacktest()" class="btn-launch" [disabled]="isBacktesting">
+                  <span class="btn-text">{{ isBacktesting ? 'SIMULATING...' : 'RUN SIMULATION' }}</span>
+                  <span class="btn-icon" *ngIf="!isBacktesting">🚀</span>
                 </button>
+              </div>
+
+              <!-- PROGRESS SECTION -->
+              <div *ngIf="isBacktesting" class="progress-section animate-fade-in">
+                <div class="progress-info">
+                  <span class="status-text">{{ backtestStatus }}</span>
+                  <span class="percentage">{{ backtestProgress }}%</span>
+                </div>
+                <div class="progress-bar-container">
+                  <div class="progress-bar-fill" [style.width.%]="backtestProgress">
+                    <div class="progress-glow"></div>
+                  </div>
+                </div>
+              </div>
+
+              
+              <div *ngIf="backtestError" class="glass-card mt-20 animate-pop" style="border-color: rgba(255, 68, 68, 0.4); background: rgba(255, 68, 68, 0.05);">
+                  <div style="color: #ff4444; font-weight: 500;">🛑 Backtest Error</div>
+                  <div class="text-muted small mt-4">{{ backtestError }}</div>
               </div>
               
               <div *ngIf="backtestResults" class="mt-40">
@@ -399,12 +445,32 @@ export class DashboardComponent implements OnInit, OnDestroy {
   
   // Backtest Module State
   isBacktesting = false;
-  backtestError: string | null = null;
-  backtestReq = {
-    fromDate: '2024-03-01',
-    toDate: '2024-03-05'
-  };
   backtestResults: any = null;
+  backtestError: string | null = null;
+  backtestStatus: string = '';
+  backtestProgress: number = 0;
+  backtestReq = {
+    symbol: 'NIFTY',
+    securityId: '13',
+    segment: 'NSE_FNO',
+    expiryFlag: 'WEEK',
+    fromDate: '2026-03-24',
+    toDate: '2026-03-27'
+  };
+
+  onBacktestInstrumentChange() {
+    const symbol = this.backtestReq.symbol;
+    if (symbol === 'NIFTY') {
+      this.backtestReq.securityId = '13';
+      this.backtestReq.segment = 'NSE_FNO';
+    } else if (symbol === 'BANKNIFTY') {
+      this.backtestReq.securityId = '25';
+      this.backtestReq.segment = 'NSE_FNO';
+    } else if (symbol === 'FINNIFTY') {
+      this.backtestReq.securityId = '27';
+      this.backtestReq.segment = 'NSE_FNO';
+    }
+  }
 
   private sub?: Subscription;
   private baseUrl = `${window.location.protocol}//${window.location.hostname}:8080/api`;
@@ -647,19 +713,49 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.isBacktesting = true;
     this.backtestError = null;
     this.backtestResults = null;
+    this.backtestStatus = 'Connecting to Dhan Rolling API...';
+    this.backtestProgress = 5;
     
+    // Animate progress (Phase 1 & 2)
+    const statusInterval = setInterval(() => {
+        if (!this.isBacktesting) {
+            clearInterval(statusInterval);
+            return;
+        }
+        
+        if (this.backtestProgress < 90) {
+          this.backtestProgress += Math.floor(Math.random() * 5) + 1;
+        }
+
+        if (this.backtestProgress < 30) {
+            this.backtestStatus = 'Phase 1/3: Scoping Historical Floors (Sniper Logic)...';
+        } else if (this.backtestProgress < 70) {
+            this.backtestStatus = 'Phase 2/3: Fetching 1-Min Intraday Rolling Data...';
+        } else {
+            this.backtestStatus = 'Phase 3/3: Simulating Two-Stage Sniper Execution...';
+        }
+    }, 1500);
+
     this.http.post<any>(`${this.baseUrl}/backtest/run`, this.backtestReq).subscribe({
       next: (res) => {
         this.isBacktesting = false;
+        this.backtestProgress = 100;
+        this.backtestStatus = 'Simulation Complete';
+        clearInterval(statusInterval);
         if (res.error) {
           this.backtestError = res.error;
+        } else if (!res.trades || res.trades.length === 0) {
+          this.backtestError = "Zero Trades Found: No entry conditions (Low x 2) were met for this period.";
         } else {
           this.backtestResults = res;
         }
       },
-      error: () => {
+      error: (err) => {
         this.isBacktesting = false;
-        this.backtestError = "Failed to reach backtest engine.";
+        this.backtestProgress = 0;
+        this.backtestStatus = '';
+        clearInterval(statusInterval);
+        this.backtestError = err.error?.error || "Connection Timeout: Server is taking too long to process high-fidelity data.";
       }
     });
   }

@@ -19,8 +19,19 @@ public class BacktestController {
 
     private final UserRepository userRepo;
     private final EncryptionService encryptionService;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final String PYTHON_ENGINE_URL = "http://python:8000/backtest";
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public BacktestController(UserRepository userRepo, EncryptionService encryptionService) {
+        this.userRepo = userRepo;
+        this.encryptionService = encryptionService;
+        
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5000);
+        factory.setReadTimeout(120000); // 120 seconds
+        this.restTemplate = new RestTemplate(factory);
+    }
 
     private User getCurrentUser() {
         String email = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();

@@ -2,11 +2,11 @@ import os
 import aiohttp
 import asyncio
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 
 API_URL = "https://api.dhan.co/v2/charts/rollingoption"
 
-async def fetch_strike_data_with_retry(session, strike_relative, opt_type, from_date, to_date, access_token, client_id, retries=1):
+async def fetch_strike_data_with_retry(session, strike_relative, opt_type, from_date, to_date, access_token, client_id, security_id="13", segment="NSE_FNO", expiry_flag="WEEK", expiry_code=1, interval="1", retries=1):
     headers = {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -15,15 +15,15 @@ async def fetch_strike_data_with_retry(session, strike_relative, opt_type, from_
     }
     
     payload = {
-        "exchangeSegment": "NSE_FNO",
-        "interval": "1",
-        "securityId": "13", # Nifty 50 Index
+        "exchangeSegment": segment,
+        "interval": interval,
+        "securityId": str(security_id),
         "instrument": "OPTIDX",
-        "expiryFlag": "WEEK",
-        "expiryCode": 1,
+        "expiryFlag": expiry_flag,
+        "expiryCode": expiry_code,
         "strike": strike_relative,
         "drvOptionType": opt_type,
-        "requiredData": ["open", "high", "low", "close", "strike"],
+        "requiredData": ["open", "high", "low", "close", "strike", "timestamp"],
         "fromDate": from_date,
         "toDate": to_date
     }
@@ -48,24 +48,54 @@ async def fetch_strike_data_with_retry(session, strike_relative, opt_type, from_
             return None, opt_type
     return None, opt_type
 
-async def fetch_historical_chain(from_date: str, to_date: str, access_token: str, client_id: str) -> pd.DataFrame:
+async def fetch_historical_chain(from_date: str, to_date: str, access_token: str, client_id: str, symbol="NIFTY", security_id="13", segment="NSE_FNO", expiry_flag="WEEK", expiry_code=1) -> pd.DataFrame:
     strikes = ["ATM"] + [f"ATM+{i}" for i in range(1, 11)] + [f"ATM-{i}" for i in range(1, 11)]
     rows = []
     
+    # Calculate pre-history start (15 days before backtest)
+    backtest_start = datetime.strptime(from_date, "%Y-%m-%d")
+    pre_history_start = (backtest_start - timedelta(days=15)).strftime("%Y-%m-%d")
+    pre_history_end = (backtest_start - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # Use a semaphore to limit concurrency and avoid 429 errors (Rate limits)
+    limit = asyncio.Semaphore(5)
+
+    async def fetch_with_limit(session, strike, opt_type, start, end, interval):
+        async with limit:
+            res, o_type = await fetch_strike_data_with_retry(
+                session, strike, opt_type, start, end, access_token, client_id, security_id, segment, expiry_flag, expiry_code, interval
+            )
+            return res, o_type, strike
+
     async with aiohttp.ClientSession() as session:
-        results = []
-        total_tasks = len(strikes) * 2
-        count = 0
-        
+        # Phase 1: Pre-fetching Daily Floors
+        print(f">>> [BACKTEST] Phase 1: Concurrent Pre-fetch (Floors)...")
+        floor_tasks = []
         for strike in strikes:
             for opt_type in ["CALL", "PUT"]:
-                count += 1
-                print(f">>> [BACKTEST] Progress: {count}/{total_tasks} | {strike} {opt_type}...", flush=True)
-                res, o_type = await fetch_strike_data_with_retry(session, strike, opt_type, from_date, to_date, access_token, client_id)
-                results.append((res, o_type))
-                await asyncio.sleep(2.0) # Increased delay to avoid 429
-            
-        for res, opt_type in results:
+                floor_tasks.append(fetch_with_limit(session, strike, opt_type, pre_history_start, pre_history_end, "D"))
+        
+        floor_results = await asyncio.gather(*floor_tasks)
+        strike_floors = {}
+        for history_res, opt_type, strike in floor_results:
+            floor = 999999.0
+            if history_res and 'data' in history_res:
+                key = 'ce' if opt_type == 'CALL' else 'pe'
+                if history_res['data'].get(key) and history_res['data'][key].get('low'):
+                    lows = [l for l in history_res['data'][key]['low'] if l > 0]
+                    if lows: floor = min(lows)
+            strike_floors[f"{strike}_{opt_type}"] = floor
+
+        # Phase 2: Fetching 1-Minute Intraday Data
+        print(f">>> [BACKTEST] Phase 2: Concurrent Intraday Fetch...")
+        data_tasks = []
+        for strike in strikes:
+            for opt_type in ["CALL", "PUT"]:
+                data_tasks.append(fetch_with_limit(session, strike, opt_type, from_date, to_date, "1"))
+        
+        data_results = await asyncio.gather(*data_tasks)
+        
+        for res, opt_type, rel_strike in data_results:
             if not res or 'data' not in res:
                 continue
                 
@@ -75,7 +105,9 @@ async def fetch_historical_chain(from_date: str, to_date: str, access_token: str
                 if not chain_data.get('timestamp') or not chain_data.get('open'):
                     continue
                 
+                historical_floor = strike_floors.get(f"{rel_strike}_{opt_type}", 999999.0)
                 num_records = len(chain_data['timestamp'])
+                
                 try:
                     for i in range(num_records):
                         stk_val = chain_data['strike'][i] if chain_data.get('strike') and len(chain_data['strike']) > i else 0
@@ -87,8 +119,8 @@ async def fetch_historical_chain(from_date: str, to_date: str, access_token: str
                             "high": float(chain_data['high'][i]),
                             "low": float(chain_data['low'][i]),
                             "close": float(chain_data['close'][i]),
+                            "historical_floor": historical_floor
                         })
-                except Exception as e:
-                    print(f"Error parsing rows: {e}")
+                except Exception: pass
                     
     return pd.DataFrame(rows)
