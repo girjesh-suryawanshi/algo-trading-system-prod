@@ -107,7 +107,8 @@ def get_option_chain(access_token, client_id, security_id, segment, expiry):
                                     "optionType": opt_type.upper(),
                                     "securityId": info.get("security_id"),
                                     "volume": info.get("volume", 0),
-                                    "oi": info.get("oi", 0)
+                                    "oi": info.get("oi", 0),
+                                    "lowPrice": info.get("low_price", info.get("last_price", 0)) # Fallback to LTP
                                 })
                     except:
                         continue
@@ -195,34 +196,32 @@ def get_historical_data(access_token, client_id, security_id, segment, days=30, 
 
 
 # =========================
-# 💰 LTP (STABLE)
+# 💰 MARKET QUOTE SNAPSHOT (ULTIMATE ACCURACY)
 # =========================
-def get_ltp(access_token, client_id, security_id):
-
+def get_security_quote(access_token, client_id, security_id):
+    """
+    Fetches the RAW session snapshot from the exchange.
+    Returns { "ltp": float, "low": float }
+    """
     url = f"{BASE_URL}/marketquote/ohlc/{security_id}"
-
+    
     try:
         res = session.get(url, headers=get_headers(access_token, client_id), timeout=15)
-
         if res.status_code == 200:
             data = _safe_json(res, {"data": {}}).get("data", {})
-
-            ltp = (
-                data.get("last_price")
-                or data.get("ltp")
-                or data.get("lastPrice")
-                or data.get("close")
-                or 0
-            )
-
-            return float(ltp)
-
-        print(f"LTP Error: {res.status_code}")
-        return 0
-
+            return {
+                "ltp": float(data.get("last_price", 0)),
+                "low": float(data.get("low", data.get("last_price", 0)))
+            }
+        return {"ltp": 0, "low": 0}
     except Exception as e:
-        print(f"LTP Exception: {e}")
-        return 0
+        print(f"Quote Snapshot Exception: {e}")
+        return {"ltp": 0, "low": 0}
+
+
+def get_ltp(access_token, client_id, security_id):
+    quote = get_security_quote(access_token, client_id, security_id)
+    return quote["ltp"]
 
 
 # =========================

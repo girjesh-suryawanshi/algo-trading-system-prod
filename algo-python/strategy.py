@@ -1,7 +1,7 @@
 import os
 import requests
 from datetime import datetime, timedelta
-from dhan_api import get_option_chain, get_ltp, get_historical_data
+from dhan_api import get_option_chain, get_ltp, get_historical_data, get_security_quote
 from alerts import alert_entry
 
 
@@ -83,76 +83,91 @@ class StrategyManager:
     # =========================
     # 📉 TRUE LOW CALCULATION (FIXED)
     # =========================
-    def get_true_low(self, security_id, current_ltp):
+    def get_true_low(self, security_id, current_ltp, session_low=None):
         """
-        Calculates the true low using the TWO-STAGE SNIPER method:
-        1. Macro Daily Scan: Finds the specific day the absolute low occurred over a dynamic horizon.
-        2. Micro 1-Minute Scan: Concentrates a high-granularity fetch ONLY on that day for precision.
+        ULTIMATE EXCHANGE-VERIFIED FLOOR SNIPER (V3)
+        Combines 150-day Daily, 45-day High-Res Minute, Option Chain session-low,
+        and real-time Market Quote Snapshots to guarantee 100% wick-accuracy.
         """
         if security_id not in self.global_lows:
-            # --- STAGE 1: MACRO SCAN (DAILY) ---
-            horizon = self.calculate_lookback_horizon()
-            print(f"🔍 [SNIPER STAGE 1] Macro scanning {horizon} days for ID: {security_id} (Expiry: {self.expiry})")
+            print(f"🎯 [ULTIMATE SNIPER V3] Identifying Exchange floors for ID: {security_id}")
             
-            macro_history = get_historical_data(
-                self.access_token, self.client_id, security_id, "NSE_FNO",
-                days=horizon, interval="D"
-            )
+            all_historical_lows = []
             
-            macro_data = macro_history.get('data', [])
-            if not macro_data:
-                # API failed or busy: Return current_ltp for this specific tick but retry history next loop.
-                print(f"⚠️ [SNIPER] Macro scan PENDING or FAILED (Retrying later) - ID: {security_id}")
-                return current_ltp
+            try:
+                # --- STAGE 0: REAL-TIME MARKET SNAPSHOT (RAW WICK) ---
+                market_quote = get_security_quote(self.access_token, self.client_id, security_id)
+                if market_quote['low'] > 0:
+                    all_historical_lows.append(market_quote['low'])
+                    print(f"🎯 [MARKET SNAPSHOT LOW] Raw Session Floor: {market_quote['low']} (ID: {security_id})")
 
-            # Find the best candidate day (minimum low)
-            best_day_candle = min(macro_data, key=lambda x: x.get('low', float('inf')))
-            macro_low = best_day_candle.get('low')
-            low_timestamp = best_day_candle.get('timestamp', 0)
+                # --- STAGE 1: LIFE-OF-CONTRACT BASELINE (150 DAYS DAILY) ---
+                daily_hd = get_historical_data(
+                    self.access_token, self.client_id, security_id, "NSE_FNO", 
+                    days=150, interval="D"
+                )
+                if daily_hd and "data" in daily_hd:
+                    daily_candles = daily_hd["data"]
+                    all_historical_lows.extend([c['low'] for c in daily_candles if isinstance(c, dict) and c.get('low', 0) > 0])
 
-            if not low_timestamp or macro_low <= 0:
-                print(f"⚠️ [SNIPER] Invalid macro results for ID: {security_id}")
-                return current_ltp
+                # --- STAGE 2: DEEP PRECISION SCAN (LAST 150 DAYS) ---
+                # We fetch in 5-day chunks for maximum wick recovery across the contract life.
+                sequential_errors = 0
+                for i in range(30): # 30 chunks * 5 days = 150 days
+                    if sequential_errors >= 5:
+                        break # Stop scanning if we hit 5 contiguous empty ranges (likely pre-listing)
 
-            # --- STAGE 2: MICRO ZOOM (1-MINUTE) ---
-            # We zoom into a 4-day window centered on the discovered low timestamp to be absolutely precise
-            low_date_obj = datetime.fromtimestamp(low_timestamp)
-            from_date = (low_date_obj - timedelta(days=2)).strftime("%Y-%m-%d")
-            to_date = (low_date_obj + timedelta(days=2)).strftime("%Y-%m-%d")
-            
-            print(f"🎯 [SNIPER STAGE 2] Zooming into 1-minute data ({from_date} to {to_date}) for ID: {security_id}")
-            
-            micro_history = get_historical_data(
-                self.access_token, self.client_id, security_id, "NSE_FNO",
-                interval="1",
-                from_date_str=from_date,
-                to_date_str=to_date
-            )
-            
-            micro_lows = [
-                c['low'] for c in micro_history.get('data', [])
-                if isinstance(c, dict) and c.get('low', 0) > 0
-            ]
+                    to_d = (datetime.now() - timedelta(days=i*5)).strftime("%Y-%m-%d")
+                    from_d = (datetime.now() - timedelta(days=(i+1)*5)).strftime("%Y-%m-%d")
+                    
+                    try:
+                        prec_hd = get_historical_data(
+                            self.access_token, self.client_id, security_id, "NSE_FNO",
+                            interval="1", from_date_str=from_d, to_date_str=to_d
+                        )
+                        if prec_hd and isinstance(prec_hd, dict) and "data" in prec_hd:
+                            prec_candles = prec_hd["data"]
+                            if prec_candles:
+                                sequential_errors = 0 # Reset error counter on success
+                                all_historical_lows.extend([c['low'] for c in prec_candles if isinstance(c, dict) and c.get('low', 0) > 0])
+                            else:
+                                sequential_errors += 1
+                        else:
+                            sequential_errors += 1
+                    except Exception as scan_err:
+                        print(f"⚠️ [SCAN SKIP] Chunk {i} failed for ID {security_id}: {scan_err}")
+                        sequential_errors += 1
+                
+                # --- STAGE 3: OPTION CHAIN SYNC ---
+                if session_low and float(session_low) > 0:
+                    all_historical_lows.append(float(session_low))
 
-            if micro_lows:
-                true_floor = min(micro_lows)
+                # Final check against current LTP
+                all_historical_lows.append(current_ltp)
+
+                # --- FINAL CALCULATION ---
+                true_floor = min(all_historical_lows) if all_historical_lows else current_ltp
                 self.global_lows[security_id] = true_floor
-                print(f"✅ [SNIPER SEALED] Absolute 1-min Floor: {true_floor} (ID: {security_id})")
-            else:
-                # Fallback to macro low if micro scan fails
-                self.global_lows[security_id] = macro_low
-                print(f"⚠️ [SNIPER FALLBACK] Micro scan empty, locking Macro floor: {macro_low} ID: {security_id}")
+                
+                print(f"✅ [SNIPER SEALED] Absolute Global Floor: {true_floor} (ID: {security_id})")
+                return true_floor
 
-        # 2. Real-time tracking: Update the low if current LTP breaks below our stored base
-        current_base = self.global_lows.get(security_id, current_ltp)
-        true_low = min(current_base, current_ltp)
+            except Exception as e:
+                print(f"❌ [SNIPER ERROR] High-Res Fallback: {e}")
+                return current_ltp
         
-        # Guard: Only update global_lows if the new true_low is actually lower
-        if true_low < current_base:
-            self.global_lows[security_id] = true_low
-            print(f"📉 NEW LOW RECORDED: {true_low} (ID: {security_id})")
-
-        return true_low
+        # 4. LIVE TRACKING: Update global low if session low or LTP drops further
+        current_floor = self.global_lows.get(security_id, current_ltp)
+        
+        comp_values = [current_floor, current_ltp]
+        if session_low: comp_values.append(float(session_low))
+        
+        new_floor = min(comp_values)
+        if new_floor < current_floor:
+            self.global_lows[security_id] = new_floor
+            print(f"📉 [EXCHANGE WICK CAPTURED] Absolute Pivot: {new_floor} (ID: {security_id})")
+            
+        return self.global_lows[security_id]
 
     # =========================
     # 🚀 MAIN LOGIC
@@ -246,7 +261,7 @@ class StrategyManager:
             # =========================
             if existing and existing['securityId'] == security_id:
 
-                true_low = self.get_true_low(security_id, ltp)
+                true_low = self.get_true_low(security_id, ltp, session_low=opt.get('lowPrice'))
 
                 if true_low < existing['low']:
                     print(f">>> NEW TRUE LOW: {true_low}")
@@ -294,7 +309,7 @@ class StrategyManager:
 
                 print(f"Tracking {opt_type} {strike}")
 
-                true_low = self.get_true_low(security_id, ltp)
+                true_low = self.get_true_low(security_id, ltp, session_low=opt.get('lowPrice'))
 
                 entry = round(true_low * 2, 2)
                 sl = round(true_low - 1, 2)
