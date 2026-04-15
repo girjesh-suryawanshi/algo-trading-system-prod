@@ -239,8 +239,7 @@ import { Router } from '@angular/router';
            </div>
         </div>
 
-        <!-- BACKTEST VIEW -->
-            <div class="glass-card backtest-lab">
+        <div *ngIf="currentView === 'BACKTEST'" class="glass-card backtest-lab">
               <div class="lab-header">
                 <h3>🧪 Strategy Backtest Lab</h3>
                 <p class="text-muted">High-fidelity simulation using Dhan Rolling Options API</p>
@@ -315,24 +314,37 @@ import { Router } from '@angular/router';
                     </div>
                  </div>
                  
-                 <table class="modern-table">
-                   <thead>
-                     <tr><th>Time</th><th>Strike</th><th>Side</th><th>Entry</th><th>Exit</th><th>Result</th><th>PnL</th></tr>
-                   </thead>
-                   <tbody>
-                     <tr *ngFor="let bt of backtestResults.trades">
-                        <td>{{ bt.entry_time | slice:11:19 }}</td>
-                        <td>{{ bt.strike }}</td>
-                        <td>{{ bt.optionType }}</td>
-                        <td>₹{{ bt.entry }}</td>
-                        <td>₹{{ bt.exit_price || '-' }}</td>
-                        <td>{{ bt.result }}</td>
-                        <td [class.neon-green]="bt.pnl > 0" [class.neon-red]="bt.pnl < 0">₹{{ bt.pnl | number:'1.1-1' }}</td>
-                     </tr>
-                   </tbody>
-                 </table>
+                  <table class="modern-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Strike</th>
+                        <th>Side</th>
+                        <th>Entry</th>
+                        <th>Exit</th>
+                        <th>Result</th>
+                        <th>PnL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let bt of backtestResults.trades" class="animate-fade-in">
+                         <td class="text-accent">{{ bt.entry_time | slice:0:10 }}</td>
+                         <td>{{ bt.entry_time | slice:11:16 }}</td>
+                         <td><span class="badge-strike">{{ bt.strike }}</span></td>
+                         <td><span class="badge" [class.ce]="bt.optionType === 'CE'" [class.pe]="bt.optionType === 'PE'">{{ bt.optionType }}</span></td>
+                         <td class="neon-blue">₹{{ bt.entry }}</td>
+                         <td>₹{{ bt.exit_price || '-' }}</td>
+                         <td>
+                           <span class="status-pill" [attr.data-status]="bt.result">{{ bt.result }}</span>
+                         </td>
+                         <td [class.neon-green]="bt.pnl > 0" [class.neon-red]="bt.pnl < 0" style="font-weight: 800;">
+                           ₹{{ bt.pnl | number:'1.1-1' }}
+                         </td>
+                      </tr>
+                    </tbody>
+                  </table>
               </div>
-            </div>
         </div>
 
       </section>
