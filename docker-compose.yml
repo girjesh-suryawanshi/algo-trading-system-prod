@@ -38,6 +38,8 @@ services:
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
     depends_on:
       - backend
+    volumes:
+      - ./algo-python:/app
 
   ui:
     build: ./algo-ui

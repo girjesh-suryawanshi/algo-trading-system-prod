@@ -196,6 +196,43 @@ def get_historical_data(access_token, client_id, security_id, segment, days=30, 
 
 
 # =========================
+# 🕒 INTRADAY DATA (NEW)
+# =========================
+def get_intraday_data(access_token, client_id, security_id, segment="NSE_FNO"):
+    """
+    Fetches 1-minute high-resolution bars for the CURRENT SESSION only.
+    Essential for capturing today's absolute lowest wick before the engine started.
+    """
+    url = f"{BASE_URL}/charts/intraday"
+    
+    today = datetime.now().strftime("%Y-%m-%d")
+    payload = {
+        "securityId": str(security_id),
+        "exchangeSegment": segment,
+        "instrument": "OPTIDX",
+        "interval": "1",
+        "fromDate": today,
+        "toDate": today
+    }
+
+    try:
+        res = session.post(url, json=payload, headers=get_headers(access_token, client_id), timeout=15)
+        if res.status_code == 200:
+            data = _safe_json(res)
+            # Structure matches historical charts
+            charts = data.get("data") if "open" not in data else data
+            
+            if isinstance(charts, dict):
+                lows = [float(l) for l in charts.get("low", []) if l and float(l) > 0]
+                return {"data": [{"low": l} for l in lows]}
+        
+        return {"data": []}
+    except Exception as e:
+        print(f"Intraday Exception: {e}")
+        return {"data": []}
+
+
+# =========================
 # 💰 MARKET QUOTE SNAPSHOT (ULTIMATE ACCURACY)
 # =========================
 def get_security_quote(access_token, client_id, security_id):
@@ -209,14 +246,21 @@ def get_security_quote(access_token, client_id, security_id):
         res = session.get(url, headers=get_headers(access_token, client_id), timeout=15)
         if res.status_code == 200:
             data = _safe_json(res, {"data": {}}).get("data", {})
+            last_price = data.get("last_price")
+            day_low = data.get("low")
+            
+            # Robust mapping
+            ltp = float(last_price) if last_price is not None else 0.0
+            low = float(day_low) if day_low is not None else ltp
+            
             return {
-                "ltp": float(data.get("last_price", 0)),
-                "low": float(data.get("low", data.get("last_price", 0)))
+                "ltp": ltp if ltp > 0 else None,
+                "low": low if low > 0 else None
             }
-        return {"ltp": 0, "low": 0}
+        return {"ltp": None, "low": None}
     except Exception as e:
         print(f"Quote Snapshot Exception: {e}")
-        return {"ltp": 0, "low": 0}
+        return {"ltp": None, "low": None}
 
 
 def get_ltp(access_token, client_id, security_id):

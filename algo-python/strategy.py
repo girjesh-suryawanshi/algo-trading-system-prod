@@ -1,7 +1,7 @@
 import os
 import requests
 from datetime import datetime, timedelta
-from dhan_api import get_option_chain, get_ltp, get_historical_data, get_security_quote
+from dhan_api import get_option_chain, get_ltp, get_historical_data, get_security_quote, get_intraday_data
 from alerts import alert_entry
 
 
@@ -97,7 +97,7 @@ class StrategyManager:
             try:
                 # --- STAGE 0: REAL-TIME MARKET SNAPSHOT (RAW WICK) ---
                 market_quote = get_security_quote(self.access_token, self.client_id, security_id)
-                if market_quote['low'] > 0:
+                if market_quote.get('low') is not None:
                     all_historical_lows.append(market_quote['low'])
                     print(f"🎯 [MARKET SNAPSHOT LOW] Raw Session Floor: {market_quote['low']} (ID: {security_id})")
 
@@ -137,8 +137,19 @@ class StrategyManager:
                     except Exception as scan_err:
                         print(f"⚠️ [SCAN SKIP] Chunk {i} failed for ID {security_id}: {scan_err}")
                         sequential_errors += 1
-                
-                # --- STAGE 3: OPTION CHAIN SYNC ---
+
+                # --- STAGE 2.5: LIVE SESSION SCAN (TODAY'S WICK) ---
+                # This recovers the absolute low reached TODAY before the engine started.
+                try:
+                    intraday_hd = get_intraday_data(self.access_token, self.client_id, security_id, "NSE_FNO")
+                    if intraday_hd and "data" in intraday_hd:
+                        session_lows = [c['low'] for c in intraday_hd["data"] if isinstance(c, dict) and c.get('low', 0) > 0]
+                        if session_lows:
+                            absolute_session_low = min(session_lows)
+                            all_historical_lows.append(absolute_session_low)
+                            print(f"✅ [LIVE SESSION LOW] Absolute Session Wick: {absolute_session_low} (ID: {security_id})")
+                except Exception as intra_err:
+                    print(f"⚠️ [INTRADAY SCAN FAIL] ID {security_id}: {intra_err}")
                 if session_low and float(session_low) > 0:
                     all_historical_lows.append(float(session_low))
 
